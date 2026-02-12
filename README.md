@@ -160,9 +160,9 @@ Annotate a trade to get AI feedback.
 | **POST** | `/api/sync` | Sync trades from blockchain for a wallet |
 | **GET** | `/api/dashboard/:wallet` | Live PnL for open positions |
 | **GET** | `/api/trades/:wallet` | Paginated trade history with filters |
-| **GET** | `/api/analytics/:wallet` | **NEW!** Comprehensive analytics (Win Rate, Fees, etc.) |
-| **GET** | `/api/analytics/:wallet/historical-pnl` | **NEW!** Daily PnL chart data with drawdown |
-| **GET** | `/api/analytics/:wallet/time-analysis` | **NEW!** Hourly/Daily performance breakdown |
+| **GET** | `/api/analytics/:wallet` | Comprehensive analytics (Win Rate, Fees, etc.) |
+| **GET** | `/api/analytics/:wallet/historical-pnl` | Daily PnL chart data with drawdown |
+| **GET** | `/api/analytics/:wallet/time-analysis` | Hourly/Daily performance breakdown |
 | **PATCH** | `/api/journal/:positionId` | Update journal notes & trigger AI analysis |
 
 ---
@@ -175,18 +175,6 @@ We provide several helper scripts in `src/scripts/` for testing and maintenance.
 -   `src/scripts/run-sync.ts`: Manually run a sync for a hardcoded wallet.
 -   `src/scripts/test-analytics.ts`: Verify analytics calculations against live data.
 -   `src/scripts/fetch-my-trades.ts`: Debugging tool to print raw trade logs.
-
----
-
-## Testing
-
-To run the analytics verification suite:
-
-```bash
-npx ts-node src/scripts/test-analytics.ts
-```
-
-This ensures all PnL, fee, and volume calculations are accurate before deployment.
 
 ---
 
