@@ -65,7 +65,7 @@ graph TD
 Clone the repository and install dependencies:
 
 ```bash
-git clone <repository_url>
+git clone https://github.com/Fortexfreddie/deriverse_backend
 cd deriverse-backend
 pnpm install
 ```
