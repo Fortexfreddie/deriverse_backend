@@ -28,20 +28,20 @@ The system follows a clean **Controller-Service-Repository** architecture:
 
 ```mermaid
 graph TD
-    Client[Frontend / API Client] -->|HTTP Requests| API[Express API]
-    API -->|Route Handler| Controller[Controllers]
-    Controller -->|Business Logic| Service[Services]
+    Client["Frontend / API Client"] -->|HTTP Requests| API["Express API"]
+    API -->|Route Handler| Controller["Controllers"]
+    Controller -->|Business Logic| Service["Services"]
     
     subgraph Services
-        BlockchainService[Blockchain Service]
-        SyncService[Sync Service]
-        PnlService[PnL Service]
-        AnalyticsService[Analytics Service]
+        BlockchainService["Blockchain Service"]
+        SyncService["Sync Service"]
+        PnlService["PnL Service"]
+        AnalyticsService["Analytics Service"]
     end
     
-    Service -->|RPC Calls| Solana[Solana Blockchain]
-    Service -->|Queries| DB[(PostgreSQL / Prisma)]
-    Service -->|AI Prompts| AI[AI Provider (Gemini/OpenAI)]
+    Service -->|RPC Calls| Solana["Solana Blockchain"]
+    Service -->|Queries| DB[("PostgreSQL / Prisma")]
+    Service -->|AI Prompts| AI["AI Provider (Gemini/OpenAI)"]
 ```
 
 ### Core Components
