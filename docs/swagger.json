@@ -1,0 +1,288 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Deriverse Analytics API",
+    "version": "1.0.0",
+    "description": "Institutional-grade Solana trading analytics and AI-powered journaling."
+  },
+  "paths": {
+    "/api/sync": {
+      "post": {
+        "summary": "Sync wallet trades from blockchain",
+        "tags": ["Sync"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "walletAddress": { "type": "string" } },
+                "required": ["walletAddress"]
+              },
+              "example": { "walletAddress": "FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync successful",
+            "content": {
+              "application/json": {
+                "example": { "success": true, "data": { "positionsUpdated": 2, "fillsCreated": 5 } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard/{wallet}": {
+      "get": {
+        "summary": "Fetch live PnL dashboard",
+        "tags": ["Dashboard"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard data fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                   "success": true,
+                   "data": [
+                       {
+                           "positionId": "0-BUY-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+                           "market": "SOL-PERP",
+                           "side": "LONG",
+                           "entry": 84.5867,
+                           "current": 81.4,
+                           "size": 1.6584,
+                           "unrealized": -5.28,
+                           "realized": 0
+                       },
+                       {
+                           "positionId": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+                           "market": "SOL-PERP",
+                           "side": "SHORT",
+                           "entry": 84.87,
+                           "current": 81.4,
+                           "size": 2,
+                           "unrealized": 6.94,
+                           "realized": 0
+                       }
+                   ]
+               }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trades/{wallet}": {
+      "get": {
+        "summary": "Fetch trade history",
+        "tags": ["Trades"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "market", "in": "query", "schema": { "type": "string" }, "required": false },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" }, "required": false },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" }, "required": false }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trade history fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                   "success": true,
+                   "data": [
+                       {
+                           "id": "59b936dc-b835-4a6a-bc62-950d429d0f38",
+                           "signature": "8wQRPvjLybiYTxDognQ1fHs3WzodVTxkJvyBH1Tg687Ex5ypUb7yd9xAvkA8Ja1mgX3kaPSDbUUYWjbBB1pczEp",
+                           "positionId": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+                           "price": 85.14,
+                           "size": 1,
+                           "fee": 0.047891,
+                           "isEntry": true,
+                           "orderType": "LIMIT",
+                           "tradeType": "SPOT",
+                           "notes": null,
+                           "timestamp": "2026-02-09T16:02:43.000Z"
+                       }
+                   ],
+                   "count": 4,
+                   "total": 4,
+                   "pagination": {
+                       "limit": null,
+                       "offset": null,
+                       "hasMore": false
+                   }
+               }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/{wallet}": {
+      "get": {
+        "summary": "Get comprehensive wallet analytics",
+        "tags": ["Analytics"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "market", "in": "query", "schema": { "type": "string" }, "required": false },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full analytics payload",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "totalPnl": { "realized": 0, "unrealized": 1.65, "total": 1.65 },
+                    "winRate": 0,
+                    "tradeCount": { "total": 2, "wins": 0, "losses": 0, "open": 2 },
+                    "avgTradeDuration": 0,
+                    "longShortRatio": 1,
+                    "totalFees": 0.17,
+                    "totalVolume": 310.02,
+                    "feeComposition": { "spot": 0.12, "perp": 0.05, "total": 0.17 },
+                    "sessionPerformance": {
+                        "Asian": { "pnl": 0, "count": 0 },
+                        "London": { "pnl": 0, "count": 0 },
+                        "New York": { "pnl": 0, "count": 0 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/{wallet}/historical-pnl": {
+      "get": {
+        "summary": "Get historical PnL chart data",
+        "tags": ["Analytics"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historical PnL data fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                    "success": true,
+                    "data": [
+                        { "date": "2026-02-09", "pnl": 12.50, "cumulativePnl": 12.50 }
+                    ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/{wallet}/time-analysis": {
+      "get": {
+        "summary": "Get time-based performance metrics",
+        "tags": ["Analytics"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false }
+        ],
+         "responses": {
+          "200": {
+            "description": "Time analysis fetched successfully",
+            "content": {
+              "application/json": {
+                  "example": {
+                      "success": true,
+                      "data": {
+                          "hourly": { "0": 0, "1": 0, "2": 0 },
+                          "daily": { "Monday": 0, "Tuesday": 0 }
+                      }
+                  }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/journal/{positionId}": {
+      "patch": {
+        "summary": "Update journal entry for a position",
+        "tags": ["Journal"],
+        "parameters": [
+          { "name": "positionId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "notes": { "type": "string" },
+                  "emotion": { "type": "string", "enum": ["Fearful", "Greedy", "Calm", "Anxious", "Neutral"] },
+                  "rating": { "type": "integer", "minimum": 1, "maximum": 5 },
+                  "hypotheticalExitPrice": { "type": "number" }
+                }
+              },
+              "example": {
+                "notes": "I entered this SOL trade because I saw a 15m breakout, but I panic sold...",
+                "emotion": "Anxious",
+                "rating": 2,
+                "hypotheticalExitPrice": 125.50
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Journal updated successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                   "success": true,
+                   "data": {
+                       "id": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+                       "notes": "I entered this SOL trade because I saw a 15m breakout...",
+                       "rating": 2,
+                       "emotion": "Anxious",
+                       "aiReview": "Your journal entry describes actions (panic selling) that did not occur...",
+                       "aiBias": "Denial",
+                       "aiScore": 2,
+                       "hypotheticalExitPrice": 125.5
+                   },
+                   "analysis": {
+                       "aiAnalysis": {
+                           "bias": "Denial",
+                           "insight": "Your journal entry describes actions (panic selling) that did not occur...",
+                           "score": 2
+                       },
+                       "traderProfile": {
+                           "profile": "The Dip Chaser"
+                       },
+                       "macroContext": {
+                           "sentiment": "Neutral"
+                       }
+                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

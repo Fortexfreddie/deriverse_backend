@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Position {
+  // We use a custom string ID (Market-Side-Wallet) to prevent duplicates
+  id             String    @id 
+  walletAddress  String
+  market         String    // e.g., "SOL-PERP"
+  side           String    // "LONG" or "SHORT"
+  status         String    @default("OPEN") // "OPEN" or "CLOSED"
+  
+  // Aggregated Stats
+  avgEntryPrice  Float     @default(0)
+  avgExitPrice   Float?
+  totalSize      Float     @default(0)
+  totalFees      Float     @default(0)
+  realizedPnl    Float?
+  
+  // Journaling & AI Features
+  notes          String?   @db.Text
+  strategyUsed   String?
+  rating         Int?      // 1-5 stars
+  emotion        String?   // e.g., "FOMO", "Calm", "Revenge Trading"
+  aiReview       String?   @db.Text // Legacy combined string
+  aiBias         String?   // FOMO, Greed, etc.
+  aiInsight      String?   @db.Text // The "Observation"
+  aiAdvice       String?   @db.Text // The "Actionable Tip"
+  aiScore        Int?      // 1-10 mental discipline score
+  aiNextAction   String?   @db.Text // Next physical or mental step
+  
+  // What-If Alternate Reality (Hindsight Analysis)
+  actualExitPrice     Float?   // What you actually sold at
+  hypotheticalExitPrice Float? // What you could have sold at (high after exit)
+  opportunityCost     Float?   // Lost profit from early exit (hypothetical - actual)
+  opportunityCostNote String?   @db.Text // "You left $X on the table..."
+  
+  // Contextual Market Sentiment
+  newsHeadlines   String?   @db.Text // Top 5 news headlines when trade was active
+  marketSentiment String?   // "Bullish", "Bearish", "Neutral" based on macro context
+  macroContext    String?   @db.Text // "FED raised rates", etc.
+  
+  // The "Nudge" System / Trader Profile
+  traderProfile   String?   // "The Early Seller", "The Dip Chaser", "The Hold Master", etc.
+  tradeFrequency  Int?      // Heuristic: how many trades in last 7 days
+  lastNudge       String?   @db.Text // Last AI nudge/coaching message
+  
+  // Relationships
+  fills          Fill[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  closedAt       DateTime? 
+  
+  @@index([walletAddress])
+}
+
+model Fill {
+  id          String   @id @default(uuid())
+  signature   String   @unique // Solana Tx Hash
+  positionId  String
+  position    Position @relation(fields: [positionId], references: [id])
+  
+  price       Float
+  size        Float
+  fee         Float
+  isEntry     Boolean  @default(true)
+  orderType   String?  // "LIMIT", "MARKET", "IOC"
+  tradeType   String?  // "SPOT", "PERP" - determined from log tag (11=SPOT, 19=PERP)  
+  // Per-trade journaling (Important for scaling in/out)
+  notes       String?  @db.Text 
+  
+  timestamp   DateTime @default(now())
+  
+  @@index([positionId])
+  @@index([timestamp])
+}

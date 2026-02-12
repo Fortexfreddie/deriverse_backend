@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    /* File Layout */
+    "rootDir": "./src",                          // Points to your source code
+    "outDir": "./dist",                         // Where compiled JS goes
+    "baseUrl": ".",                             // Allows for cleaner absolute imports
+
+    /* Environment Settings */
+    "module": "NodeNext",                       // Modern Node module resolution
+    "moduleResolution": "NodeNext",
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "types": ["node"],                          // Ensures Node.js globals are recognized
+
+    /* Other Outputs */
+    "sourceMap": true,                          // Essential for debugging in Cursor
+    "declaration": true,
+    "declarationMap": true,
+
+    /* Stricter Typechecking */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    /* Style & Safety */
+    "resolveJsonModule": true,
+    "esModuleInterop": true,                    // Allows import express from 'express'
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "moduleDetection": "force"
+  },
+  "include": ["src/**/*", "src/services/sync.service.ts"],                      // Only compile files in src
+  "exclude": ["node_modules", "dist"]
+}
