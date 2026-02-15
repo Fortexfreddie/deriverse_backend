@@ -2,9 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { SyncService } from '../services/sync.service';
 import { PnlService } from '../services/pnl.service';
 import analyticsService from '../services/analytics.service';
-import aiService from '../services/ai.service';
-import sentimentService from '../services/sentiment.service';
-import traderProfileService from '../services/trader-profile.service';
+import journalService from '../services/journal.service';
 import { prisma } from '../config/db';
 import { AppError } from '../utils/appError';
 
@@ -251,94 +249,17 @@ export class TradeController {
 
             if (!positionId) throw new AppError('Position ID is required', 400);
 
-            // 1. Fetch current position data to give AI the "Context"
-            const position = await prisma.position.findUnique({
-                where: { id: positionId },
-                include: { fills: true }
-            });
-
-            if (!position) throw new AppError('Position not found', 404);
-
-            // 2. Calculate What-If Alternate Reality (Hindsight Analysis)
-            let opportunityCost: number | undefined = undefined;
-            let opportunityCostNote: string | undefined = undefined;
-            if (hypotheticalExitPrice && position.avgExitPrice) {
-                opportunityCost = (hypotheticalExitPrice - position.avgExitPrice) * position.totalSize;
-                if (opportunityCost > 0) {
-                    opportunityCostNote = `You left $${opportunityCost.toFixed(2)} on the table because you were scared. Your exit strategy is leakier than a basket.`;
-                }
-            }
-
-            // 3. Get Contextual Market Sentiment
-            const headlines = await sentimentService.getTopHeadlines(position.market);
-            const sentimentResult = await sentimentService.analyzeMarketSentiment(headlines);
-            const macroTiming = sentimentService.evaluateTradeTimingVsMacro(
-                sentimentResult.sentiment,
-                position.side
-            );
-
-            // 4. Get Trader Profile / Nudge
-            const traderProfile = await traderProfileService.analyzeTraderProfile(position.walletAddress);
-            const nudge = traderProfileService.generateNudge(traderProfile.profile);
-
-            // 5. Run AI analysis (passing the actual trade data + macro context)
-            let aiResult: any = null;
-            try {
-                const contextWithMacro = {
-                    ...position,
-                    newsHeadlines: headlines,
-                    marketSentiment: sentimentResult.sentiment,
-                    macroContext: sentimentResult.macroContext,
-                    opportunityCost,
-                    traderProfile: traderProfile.profile
-                };
-                aiResult = await aiService.analyzeTradeJournal(notes || '', contextWithMacro);
-            } catch (aiError) {
-                console.error("AI Analysis skipped:", aiError);
-            }
-
-            // 6. Build update data object with only defined values
-            const updateData: any = {
-                newsHeadlines: headlines.join(' | '),
-                marketSentiment: sentimentResult.sentiment,
-                macroContext: sentimentResult.macroContext + ' ' + macroTiming,
-                traderProfile: traderProfile.profile,
-                tradeFrequency: Math.ceil(traderProfile.avgHoldTime),
-                lastNudge: nudge
-            };
-
-            // Add optional fields only if provided
-            if (notes !== undefined) updateData.notes = notes;
-            if (emotion !== undefined) updateData.emotion = emotion;
-            if (rating !== undefined) updateData.rating = rating;
-            if (aiResult?.bias) updateData.aiBias = aiResult.bias;
-            if (aiResult?.insight) updateData.aiInsight = aiResult.insight;
-            if (aiResult?.advice) updateData.aiAdvice = aiResult.advice;
-            if (aiResult?.score) updateData.aiScore = parseInt(String(aiResult.score));
-            if (aiResult?.next_action) updateData.aiNextAction = aiResult.next_action;
-            if (aiResult) updateData.aiReview = `${aiResult.insight}\n\nTip: ${aiResult.next_action || aiResult.advice}`;
-            if (hypotheticalExitPrice) updateData.hypotheticalExitPrice = hypotheticalExitPrice;
-            if (opportunityCost) updateData.opportunityCost = opportunityCost;
-            if (opportunityCostNote) updateData.opportunityCostNote = opportunityCostNote;
-
-            // 7. Update everything in one database call
-            const updated = await prisma.position.update({
-                where: { id: positionId },
-                data: updateData
+            const result = await journalService.analyzeAndJournal(positionId, {
+                notes,
+                emotion,
+                rating,
+                hypotheticalExitPrice
             });
 
             res.status(200).json({
                 success: true,
-                data: updated,
-                analysis: {
-                    aiAnalysis: aiResult,
-                    traderProfile: traderProfile,
-                    macroContext: sentimentResult,
-                    whatIfAnalysis: {
-                        opportunityCost,
-                        opportunityCostNote
-                    }
-                }
+                data: result.updated,
+                analysis: result.analysis
             });
         } catch (error) {
             next(error);

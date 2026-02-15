@@ -26,8 +26,8 @@ export class AIService {
     });
   }
 
-  async analyzeTradeJournal(note: string, tradeContext: any): Promise<AIResponse> {
-    const provider = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+  async analyzeTradeJournal(note: string, tradeContext: any, retryProvider?: string): Promise<AIResponse> {
+    const provider = (retryProvider || process.env.AI_PROVIDER || 'gemini').toLowerCase();
     const model = provider === 'gemini' ? (process.env.GEMINI_MODEL || 'gemini-1.5-flash') : (process.env.DEEPSEEK_MODEL || 'deepseek-chat');
     const client = provider === 'gemini' ? this.gemini : this.deepseek;
 
@@ -73,10 +73,9 @@ RETURN ONLY VALID JSON. No markdown backticks, no prose.
       console.error(`AI Error (${provider}):`, error.message);
       
       // Recursive Fallback to Gemini if DeepSeek fails
-      if (provider === 'deepseek') {
+      if (provider === 'deepseek' && !retryProvider) {
         console.log("Switching to Gemini fallback...");
-        process.env.AI_PROVIDER = 'gemini';
-        return this.analyzeTradeJournal(note, tradeContext);
+        return this.analyzeTradeJournal(note, tradeContext, 'gemini');
       }
       return { insight: "AI Service currently unavailable.", score: 0 };
     }

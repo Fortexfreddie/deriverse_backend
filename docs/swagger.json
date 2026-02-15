@@ -28,10 +28,12 @@
             "description": "Sync successful",
             "content": {
               "application/json": {
-                "example": { "success": true, "data": { "positionsUpdated": 2, "fillsCreated": 5 } }
+                "example": { "success": true, "data": { "positionsUpdated": 2, "fillsProcessed": 5 } }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
         }
       }
     },
@@ -58,7 +60,8 @@
                            "current": 81.4,
                            "size": 1.6584,
                            "unrealized": -5.28,
-                           "realized": 0
+                           "realized": 0,
+                           "fees": 0.04
                        },
                        {
                            "positionId": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
@@ -68,13 +71,16 @@
                            "current": 81.4,
                            "size": 2,
                            "unrealized": 6.94,
-                           "realized": 0
+                           "realized": 0,
+                           "fees": 0.05
                        }
                    ]
                }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
         }
       }
     },
@@ -122,7 +128,9 @@
                }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
         }
       }
     },
@@ -156,12 +164,26 @@
                         "Asian": { "pnl": 0, "count": 0 },
                         "London": { "pnl": 0, "count": 0 },
                         "New York": { "pnl": 0, "count": 0 }
+                    },
+                    "marketPerformance": {
+                        "SOL-PERP": { "pnl": 1.65, "winRate": 0, "tradeCount": 2, "volume": 310.02 }
+                    },
+                    "riskMetrics": {
+                        "sharpeRatio": 1.45,
+                        "sortinoRatio": 2.1,
+                        "maxDrawdown": 15.4,
+                        "profitFactor": 1.8,
+                        "expectancy": 0.35,
+                        "dailyVariance": 0.05,
+                        "annualVolatility": 0.45
                     }
                   }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
         }
       }
     },
@@ -182,12 +204,14 @@
                 "example": {
                     "success": true,
                     "data": [
-                        { "date": "2026-02-09", "pnl": 12.50, "cumulativePnl": 12.50 }
+                        { "date": "2026-02-09", "realizedPnl": 0, "unrealizedPnl": 12.50, "totalPnl": 12.50, "cumulativePnl": 12.50, "drawdown": 0 }
                     ]
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
         }
       }
     },
@@ -208,13 +232,19 @@
                   "example": {
                       "success": true,
                       "data": {
-                          "hourly": { "0": 0, "1": 0, "2": 0 },
-                          "daily": { "Monday": 0, "Tuesday": 0 }
+                          "hourly": [
+                              { "hour": 0, "pnl": 1.5, "trades": 2, "winRate": 50, "volume": 100 }
+                          ],
+                          "daily": [
+                              { "date": "2026-02-09", "day": "Monday", "pnl": 12.5, "trades": 5, "winRate": 60, "volume": 500 }
+                          ]
                       }
                   }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
         }
       }
     },
@@ -264,23 +294,46 @@
                        "aiScore": 2,
                        "hypotheticalExitPrice": 125.5
                    },
-                   "analysis": {
-                       "aiAnalysis": {
-                           "bias": "Denial",
-                           "insight": "Your journal entry describes actions (panic selling) that did not occur...",
-                           "score": 2
-                       },
-                       "traderProfile": {
-                           "profile": "The Dip Chaser"
-                       },
-                       "macroContext": {
-                           "sentiment": "Neutral"
-                       }
-                   }
+                    "analysis": {
+                        "aiAnalysis": {
+                            "bias": "Denial",
+                            "insight": "Your journal entry describes actions (panic selling) that did not occur based on execution data.",
+                            "score": 2,
+                            "advice": "Stick to your plan.",
+                            "next_action": "Walk away for 5 mins."
+                        },
+                        "traderProfile": {
+                            "profile": "The Dip Chaser",
+                            "strength": "High Energy",
+                            "weakness": "Impatience",
+                            "nudge": "Wait for confirmation before entry."
+                        },
+                        "macroContext": {
+                            "sentiment": "Neutral",
+                            "macroContext": "Market is choppy. Avoid leverage."
+                        },
+                        "whatIfAnalysis": {
+                            "opportunityCost": 45.20,
+                            "opportunityCostNote": "You left money on the table."
+                        }
+                    }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": { "type": "string" }
         }
       }
     }

@@ -1,5 +1,6 @@
 import { prisma } from '../config/db';
 import { BlockchainService } from './blockchain.service';
+import journalService from './journal.service';
 import { getMarketName } from '../config/constants';
 import { SyncResult, TradeEvent } from '../types';
 
@@ -26,21 +27,28 @@ export class SyncService {
             const since = lastFill ? lastFill.timestamp : undefined;
             const trades = await this.blockchainService.fetchDecodedTrades(walletAddress, limit, since);
             
-            if (trades.length === 0) return { success: true, positionsUpdated: 0, fillsCreated: 0 };
+            if (trades.length === 0) return { success: true, positionsUpdated: 0, fillsProcessed: 0 };
 
             const positionGroups = this.groupTradesByPosition(trades);
-            let fillsCreated = 0;
+            let fillsProcessed = 0;
 
             for (const [posId, data] of positionGroups.entries()) {
                 const marketName = getMarketName(data.marketId);
                 const dbPositionId = `${posId}-${walletAddress}`;
+
+                // --- Timestamp Integrity Fix (Part 2) ---
+                // Find the earliest trade in this batch to serve as the TRUE creation time
+                // This prevents "Negative Duration" when syncing historical data
+                const firstTradeTimestamp = data.trades.length > 0
+                    ? data.trades.reduce((min: Date, t: TradeEvent) => t.timestamp < min ? t.timestamp : min, data.trades[0].timestamp)
+                    : new Date();
 
                 /**
                  * STEP 1: ENSURE PARENT EXISTS
                  * We upsert the Position first with empty/default metrics.
                  * This satisfies the Foreign Key constraint for the Fills.
                  */
-                await prisma.position.upsert({
+                const existingPos = await prisma.position.upsert({
                     where: { id: dbPositionId },
                     update: {}, // Only create if missing, don't overwrite metrics yet
                     create: {
@@ -51,9 +59,13 @@ export class SyncService {
                         totalSize: 0,
                         avgEntryPrice: 0,
                         totalFees: 0,
-                        status: 'OPEN'
+                        status: 'OPEN',
+                        createdAt: firstTradeTimestamp // Fix: Use earliest trade time, not server time
                     }
                 });
+
+                // Check prior status to determine if this is a "New Close" event
+                const wasClosed = existingPos.status === 'CLOSED';
 
                 /**
                  * STEP 2: UPSERT FILLS
@@ -79,7 +91,7 @@ export class SyncService {
                             tradeType: trade.tradeType
                         }
                     });
-                    fillsCreated++;
+                    fillsProcessed++;
                 }
 
                 /**
@@ -90,6 +102,11 @@ export class SyncService {
                     where: { positionId: dbPositionId },
                     orderBy: { timestamp: 'asc' }
                 });
+
+                // --- Timestamp Integrity Fix ---
+                // Use the timestamp of the LAST fill in the sequence for closure time
+                const lastFill = allFills[allFills.length - 1];
+                const lastFillTimestamp = lastFill ? lastFill.timestamp : new Date();
 
                 let netSize = 0;
                 let entryValue = 0, entrySize = 0;
@@ -120,13 +137,14 @@ export class SyncService {
                 await prisma.position.update({
                     where: { id: dbPositionId },
                     data: {
-                        totalSize: Math.abs(netSize),
+                        totalSize: isClosed ? 0 : Math.abs(netSize),
                         avgEntryPrice,
                         totalFees,
-                        updatedAt: new Date(),
+                        updatedAt: lastFillTimestamp, // Consistent with blockchain time
                         ...(isClosed ? {
                             status: 'CLOSED',
-                            closedAt: new Date(),
+                            // Fix: Use blockchain time, not server time
+                            closedAt: lastFillTimestamp,
                             realizedPnl,
                             avgExitPrice
                         } : {
@@ -135,9 +153,17 @@ export class SyncService {
                         })
                     }
                 });
+
+                // --- Auto-Coach Trigger ---
+                // If position just closed, fire-and-forget AI analysis
+                if (isClosed && !wasClosed) {
+                    journalService.analyzeAndJournal(dbPositionId).catch(err => 
+                        console.error(`[Auto-Coach] Failed for ${dbPositionId}:`, err)
+                    );
+                }
             }
 
-            return { success: true, positionsUpdated: positionGroups.size, fillsCreated };
+            return { success: true, positionsUpdated: positionGroups.size, fillsProcessed };
         } catch (error: any) {
             console.error("Sync Service Error:", error.message);
             throw error;
@@ -147,7 +173,12 @@ export class SyncService {
     private groupTradesByPosition(trades: TradeEvent[]) {
         const groups = new Map<string, any>();
         for (const trade of trades) {
-            const key = `${trade.marketId}-${trade.side}`;
+            // Use the positionId from the trade event if available to prevent collision
+            // Fallback to daily bucket key to avoid merging trades across weeks
+            const key = trade.marketId 
+                ? `${trade.marketId}-${trade.side}-${Math.floor(trade.timestamp.getTime() / 86400000)}`
+                : `${trade.symbol}-${trade.side}-${Math.floor(trade.timestamp.getTime() / 86400000)}`;
+            
             if (!groups.has(key)) {
                 groups.set(key, { marketId: trade.marketId, side: trade.side, trades: [] });
             }

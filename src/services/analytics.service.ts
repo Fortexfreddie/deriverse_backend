@@ -56,6 +56,21 @@ export interface ComprehensiveAnalytics {
         MARKET?: { count: number; totalPnl: number; avgPnl: number };
         IOC?: { count: number; totalPnl: number; avgPnl: number };
     };
+    marketPerformance: {
+        [market: string]: {
+            pnl: number;
+            winRate: number;
+            tradeCount: number;
+            volume: number;
+        }
+    };
+    riskMetrics: {
+        sharpeRatio: number;
+        sortinoRatio: number;
+        maxDrawdown: number;
+        profitFactor: number;
+        expectancy: number;
+    };
 }
 
 export class AnalyticsService {
@@ -129,10 +144,10 @@ export class AnalyticsService {
 
         // Calculate average trade duration
         const durations = closedPositions
-            .filter(p => p.closedAt && p.createdAt)
+            .filter(p => p.closedAt && p.createdAt && p.closedAt > p.createdAt)
             .map(p => {
                 const ms = p.closedAt!.getTime() - p.createdAt.getTime();
-                return ms / (1000 * 60); // Convert to minutes
+                return Math.max(0, ms) / (1000 * 60); // Convert to minutes
             });
         const avgTradeDuration = durations.length > 0
             ? durations.reduce((sum, d) => sum + d, 0) / durations.length
@@ -198,7 +213,10 @@ export class AnalyticsService {
         };
 
         closedPositions.forEach(p => {
-            const hour = p.closedAt!.getUTCHours();
+            // Guard: skip positions with missing closedAt to prevent runtime crash
+            if (!p.closedAt) return;
+
+            const hour = p.closedAt.getUTCHours();
             let sessionLabel = SESSIONS.ASIAN.label;
             if (hour >= SESSIONS.LONDON.start && hour < SESSIONS.LONDON.end) sessionLabel = SESSIONS.LONDON.label;
             else if (hour >= SESSIONS.NEW_YORK.start && hour < SESSIONS.NEW_YORK.end) sessionLabel = SESSIONS.NEW_YORK.label;
@@ -235,6 +253,97 @@ export class AnalyticsService {
             }
         }
 
+        // --- Market Performance Logic ---
+        const marketPerformance: { [market: string]: any } = {};
+        const marketGroups = new Map<string, typeof positions>();
+        
+        // Group positions by market
+        positions.forEach(p => {
+             const m = p.market;
+             if (!marketGroups.has(m)) marketGroups.set(m, []);
+             marketGroups.get(m)!.push(p);
+        });
+
+        for (const [market, mPositions] of marketGroups) {
+            const mClosed = mPositions.filter(p => p.status === 'CLOSED' && p.realizedPnl !== null);
+            const mWins = mClosed.filter(p => (p.realizedPnl || 0) > 0).length;
+            const mPnl = mClosed.reduce((sum, p) => sum + (p.realizedPnl || 0), 0);
+            
+            // Calculate volume for this market
+            const mFills = mPositions.flatMap(p => p.fills || []);
+            const mVolume = mFills.reduce((sum, f) => sum + (f.price * f.size), 0);
+
+            marketPerformance[market] = {
+                pnl: Math.round(mPnl * 100) / 100,
+                winRate: mClosed.length > 0 ? Math.round((mWins / mClosed.length) * 100) : 0,
+                tradeCount: mPositions.length,
+                volume: Math.round(mVolume * 100) / 100
+            };
+        }
+
+        // --- Risk Metrics Logic ---
+        // 1. Calculate Daily PnL for Sharpe/Sortino
+        const dailyPnlMap = new Map<string, number>();
+        closedPositions.forEach(p => {
+            if (!p.closedAt || p.realizedPnl === null) return;
+            const date = p.closedAt.toISOString().split('T')[0] ?? '';
+            dailyPnlMap.set(date, (dailyPnlMap.get(date) || 0) + p.realizedPnl);
+        });
+
+        const dailyPnls = Array.from(dailyPnlMap.values());
+        
+        let sharpeRatio = 0;
+        let sortinoRatio = 0;
+        let maxDrawdown = 0;
+
+        if (dailyPnls.length > 1) {
+            const avgDailyPnl = dailyPnls.reduce((sum, v) => sum + v, 0) / dailyPnls.length;
+            
+            // Standard Deviation (Sample Variance N-1)
+            const variance = dailyPnls.reduce((sum, v) => sum + Math.pow(v - avgDailyPnl, 2), 0) / (dailyPnls.length - 1);
+            const stdDev = Math.sqrt(variance);
+            
+            // Downside Deviation (Sortino)
+            const downsideVariance = dailyPnls
+                .filter(v => v < 0)
+                .reduce((sum, v) => sum + Math.pow(v, 2), 0) / (dailyPnls.length - 1);
+            const downsideDev = Math.sqrt(downsideVariance);
+
+            // Annualize (assume 365 trading days for crypto)
+            if (stdDev !== 0) sharpeRatio = (avgDailyPnl / stdDev) * Math.sqrt(365);
+            if (downsideDev !== 0) sortinoRatio = (avgDailyPnl / downsideDev) * Math.sqrt(365);
+        }
+
+        // --- Max Drawdown (Cumulative Equity Curve) ---
+        let cumPnl = 0;
+        let peak = 0;
+        let maxDdAbs = 0;
+
+        // Re-sort to ensure chronological equity tracking
+        const sortedByDate = [...closedPositions].sort((a, b) => 
+            (a.closedAt?.getTime() || 0) - (b.closedAt?.getTime() || 0)
+        );
+
+        for (const p of sortedByDate) {
+            if (p.realizedPnl === null) continue;
+            cumPnl += p.realizedPnl;
+            if (cumPnl > peak) peak = cumPnl;
+            const currentDd = peak - cumPnl;
+            if (currentDd > maxDdAbs) maxDdAbs = currentDd;
+        }
+        // Use Peak to get percentage, but guard against Peak = 0
+        maxDrawdown = peak > 0 ? (maxDdAbs / peak) * 100 : 0;
+
+        // Profit Factor
+        const grossProfit = wins.reduce((sum, p) => sum + (p.realizedPnl || 0), 0);
+        const grossLoss = Math.abs(losses.reduce((sum, p) => sum + (p.realizedPnl || 0), 0));
+        const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
+
+        // Expectancy
+        const winRateDecimal = (winningTrades / (closedPositions.length || 1));
+        const lossRateDecimal = (losingTrades / (closedPositions.length || 1));
+        const expectancy = (winRateDecimal * avgWin) + (lossRateDecimal * avgLoss);
+
         return {
             totalPnl: {
                 realized: realizedPnl,
@@ -257,7 +366,15 @@ export class AnalyticsService {
                 total: Math.round(feeComposition.total * 100) / 100
             },
             sessionPerformance,
-            orderTypePerformance
+            orderTypePerformance,
+            marketPerformance,
+            riskMetrics: {
+                sharpeRatio: Math.round(sharpeRatio * 100) / 100,
+                sortinoRatio: Math.round(sortinoRatio * 100) / 100,
+                maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+                profitFactor: Math.round(profitFactor * 100) / 100,
+                expectancy: Math.round(expectancy * 100) / 100
+            }
         };
     }
 

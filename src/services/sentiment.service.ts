@@ -8,7 +8,7 @@ export class SentimentService {
 
   async getTopHeadlines(market: string): Promise<string[]> {
     if (!this.apiKey) return ["Market sentiment is mixed."];
-    const currency = market.split('-')[0];
+    const currency = market.split('-')[0]?.toUpperCase();
     
     try {
       const endpoints = [
@@ -25,7 +25,8 @@ export class SentimentService {
         ...(results[1]?.results || [])
       ].map(post => post.title);
 
-      return Array.from(new Set(allHeadlines)).slice(0, 10);
+      // Increase limit to prevent starvation
+      return Array.from(new Set(allHeadlines)).slice(0, 20);
     } catch (error) {
       console.error("News API Error:", error);
       return [];
@@ -38,13 +39,13 @@ export class SentimentService {
     }
 
     const prompt = `
-        As a Senior Crypto Macro Analyst, analyze these headlines. 
+        Analyze these headlines for the provided crypto market. 
         
-        CRITICAL RULES:
-        1. DO NOT be neutral unless the news is completely contradictory and equal in weight.
-        2. WEIGHTING: Negative news about "Network Health," "Validator Shrinkage," or "Institutional Price Cuts" carries 2x more weight than "Exchange Updates."
-        3. If there is a clear trend of institutional skepticism, mark it as "Bearish."
-        
+        SCORING ENGINE:
+        - High Impact: SEC/Regulator news, Exchange hacks, Network downtime (-3 or +3).
+        - Medium Impact: New listings, Partnership hype (+1).
+        - If the news is > 6 hours old, degrade weight by 50%.
+
         Headlines: ${JSON.stringify(headlines)}
         
         Return ONLY a JSON object:
@@ -83,6 +84,11 @@ export class SentimentService {
 
     const isAgainstTide = (isLong && sentiment === 'Bearish') || (isShort && sentiment === 'Bullish');
     
+    // Specific check for Short Squeeze risk
+    if (isShort && sentiment === 'Bullish') {
+        return "SHORT SQUEEZE WARNING: The macro tide is Bullish. Shorting here is picking up pennies in front of a steamroller. Watch the funding rates!";
+    }
+
     if (isAgainstTide) {
       return isLong 
         ? "SWIMMING AGAINST THE TIDE: You are LONG while the macro sentiment is BEARISH. This is often a sign of Bottom Fishing or FOMO. Ensure you aren't fighting the trend."

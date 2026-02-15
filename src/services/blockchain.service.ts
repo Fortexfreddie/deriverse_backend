@@ -1,14 +1,10 @@
 import { rpc, deriverseEngine, programId } from '../config/deriverse';
 import { TradeEvent } from '../types';
+import { getMarketName } from '../config/constants';
 
-const PRICE_DEC = 1e9;
-const ASSET_DEC = 1e9;
+// const PRICE_DEC = 1e9;
+// const ASSET_DEC = 1e9;
 const QUOTE_DEC = 1e6; // USDC has 6 decimals
-
-const INSTR_ID_TO_SYMBOL: Record<number, string> = {
-    0: "SOL-USDC",
-    1: "BTC-USDC",
-};
 
 /**
  * BLOCKCHAIN SERVICE
@@ -47,7 +43,14 @@ export class BlockchainService {
 
                 if (logs.some((line: string) => line.startsWith("Program data: "))) {
                     const decoded = await this.decodeBinaryLogs(logs);
-                    const parsed = this.mapEventsToTrades(decoded, sigInfo.signature, sigInfo.blockTime);
+                    
+                    // Accurate Fees & Timestamp
+                    // Explicitly cast to Number before dividing
+                    const rawFee = tx?.value?.meta?.fee || tx?.meta?.fee || 0;
+                    const networkFee = Number(rawFee) / 1e9; 
+                    const txBlockTime = tx?.blockTime || tx?.value?.blockTime || sigInfo.blockTime;
+
+                    const parsed = this.mapEventsToTrades(decoded, sigInfo.signature, txBlockTime, networkFee);
                     
                     if (parsed.length > 0) {
                         allTrades.push(...parsed);
@@ -99,73 +102,97 @@ export class BlockchainService {
         return decoded;
     }
 
-    private mapEventsToTrades(events: any[], signature: string, blockTime: any): TradeEvent[] {
-    const trades: TradeEvent[] = [];
-    const timestamp = blockTime ? new Date(Number(blockTime) * 1000) : new Date();
-    
-    const orderIdToInstrId = new Map<number, number>();
-    for (const msg of events) {
-        if (msg.orderId != null && msg.instrId != null) {
-            orderIdToInstrId.set(Number(msg.orderId), Number(msg.instrId));
-        }
-    }
-
-    let totalFees = 0;
-    const feeEvents = events.filter((e: any) => e.tag === 15 || e.tag === 23 || e.rebates !== undefined);
-    for (const feeEvent of feeEvents) {
-        const feeVal = feeEvent.fees !== undefined ? feeEvent.fees : feeEvent.rebates;
-        if (feeVal !== undefined) {
-            // QUOTE_DEC should be 1e6 for USDC
-            totalFees += Math.abs(Number(feeVal)) / QUOTE_DEC;
-        }
-    }
-
-    // Filter for trade events (11 = Spot Trade, 19 = Perp Trade)
-    const tradeEvents = events.filter((e: any) => 
-        e.tag === 11 || e.tag === 19 || (e.price !== undefined && (e.qty || e.perps))
-    );
-
-    const feePerTrade = tradeEvents.length > 0 ? totalFees / tradeEvents.length : 0;
-
-    for (const e of tradeEvents) {
-        const instrId = e.instrId ?? e.marketId ?? orderIdToInstrId.get(Number(e.orderId)) ?? 0;
+    private mapEventsToTrades(events: any[], signature: string, blockTime: any, networkFee: number = 0): TradeEvent[] {
+        const trades: TradeEvent[] = [];
+        const timestamp = blockTime ? new Date(Number(blockTime) * 1000) : new Date();
         
-        // Use your MARKET_MAP or INSTR_ID_TO_SYMBOL
-        const symbol = INSTR_ID_TO_SYMBOL[instrId] || `Unknown-${instrId}`;
+        // 1. Pre-process ALL events to link Order IDs and Market IDs (From your older logic)
+        const orderIdToInstrId = new Map<number, number>();
+        events.forEach(msg => {
+            const possibleId = msg.instrId ?? msg.marketId ?? msg.assetId ?? msg.instrumentIndex;
+            if (msg.orderId != null && possibleId != null) {
+                orderIdToInstrId.set(Number(msg.orderId), Number(possibleId));
+            }
+        });
 
-        const rawPrice = Number(e.price);
-        const price = rawPrice > 1e6 ? rawPrice / PRICE_DEC : rawPrice;
+        let totalFees = networkFee;
+        let fundingValue = 0;
 
-        const trade: TradeEvent = {
-            signature,
-            side: (e.side === 0 || e.side === 'buy') ? 'BUY' : 'SELL',
-            price: price,
-            size: Number(e.qty ?? e.perps ?? 0) / ASSET_DEC,
-            marketId: instrId,
-            symbol: symbol,
-            timestamp,
-            fee: feePerTrade,
-            // Tag 19 or presence of 'perps' field indicates Perp market
-            tradeType: (e.tag === 19 || e.perps !== undefined) ? 'PERP' : 'SPOT'
-        };
+        // 2. Aggregate Fees & Funding (Tag 15/23/24)
+        events.forEach((e: any) => {
+            if (e.tag === 15 || e.tag === 23 || e.fees !== undefined) {
+                const feeVal = e.fees !== undefined ? e.fees : (e.rebates || 0);
+                totalFees += Math.abs(Number(feeVal)) / QUOTE_DEC;
+            }
+            if (e.tag === 24 || e.funding !== undefined) {
+                fundingValue += Number(e.funding || 0) / QUOTE_DEC;
+            }
+        });
 
-        (trade as any).notional = trade.price * trade.size;
+        // 3. Filter for Fills (Tag 11 = Spot, Tag 19 = Perp)
+        const tradeEvents = events.filter((e: any) => 
+            e.tag === 11 || e.tag === 19 || (e.price !== undefined && (e.qty || e.perps))
+        );
 
-        /**
-         * FIX: Robust OrderType detection
-         * Prioritizes explicit orderType, then IOC flags, finally defaulting to LIMIT
-         */
-        if (e.orderType !== undefined) {
-            trade.orderType = e.orderType === 0 ? 'LIMIT' : e.orderType === 1 ? 'MARKET' : 'IOC';
-        } else if (e.ioc !== undefined) {
-            trade.orderType = e.ioc === 1 ? 'IOC' : 'LIMIT';
-        } else {
-            // Defaulting to LIMIT ensures the field is not NULL in Prisma
-            trade.orderType = 'LIMIT'; 
+        const feePerTrade = tradeEvents.length > 0 ? totalFees / tradeEvents.length : 0;
+
+        for (const e of tradeEvents) {
+            const rawPrice = Number(e.price);
+            const rawQty = Number(e.qty ?? e.perps ?? 0);
+
+            // 4. PRICE-BASED SCALING & ID ASSIGNMENT (Merging your new requirements)
+            let instrId: number;
+            let assetDecimals: number;
+
+            if (rawPrice > 10000) {
+                instrId = 99; // LETTERA
+                assetDecimals = 1e7; 
+            } else if (rawPrice > 10 && rawPrice < 500) {
+                instrId = 0; // SOL
+                assetDecimals = 1e9;
+            } else if (rawPrice > 0.9 && rawPrice < 1.1) {
+                instrId = 100; // VELIT
+                assetDecimals = 1e6;
+            } else {
+                const foundId = e.instrId ?? e.marketId ?? orderIdToInstrId.get(Number(e.orderId));
+                instrId = foundId !== undefined ? Number(foundId) : -1;
+                assetDecimals = 1e9;
+            }
+
+            const symbol = getMarketName(instrId);
+
+            // 5. CONSTRUCT TRADE OBJECT
+            const trade: TradeEvent = {
+                signature,
+                side: (e.side === 0 || e.side === 'buy' || e.side === 'bid') ? 'BUY' : 'SELL',
+                price: rawPrice,
+                size: rawQty / assetDecimals, 
+                marketId: instrId,
+                symbol: symbol,
+                timestamp,
+                fee: feePerTrade,
+                tradeType: (e.tag === 19 || e.perps !== undefined) ? 'PERP' : 'SPOT'
+            };
+
+            // 6. RESTORED ROBUST ORDER TYPE INFERENCE (From your older code)
+            if (e.orderType !== undefined && e.orderType !== null) {
+                trade.orderType = e.orderType === 0 ? 'LIMIT' : e.orderType === 1 ? 'MARKET' : 'IOC';
+            } else if (e.ioc === 1 || e.clientId === 1 || e.clientId === 2 || e.clientId === 923) {
+                // Includes your specific Client IDs found in recent logs
+                trade.orderType = 'MARKET';
+            } else if (e.tag === 11 || e.tag === 19) {
+                // Fills without metadata are almost always from Market orders in the UI
+                trade.orderType = 'MARKET';
+            } else {
+                trade.orderType = 'LIMIT'; 
+            }
+
+            (trade as any).notional = trade.price * trade.size;
+            (trade as any).fundingValue = fundingValue;
+
+            trades.push(trade);
         }
 
-        trades.push(trade);
+        return trades;
     }
-    return trades;
-}
 }

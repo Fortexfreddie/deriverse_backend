@@ -20,7 +20,7 @@ export interface TradeEvent {
 export interface SyncResult {
     success: boolean;
     positionsUpdated: number;
-    fillsCreated: number;
+    fillsProcessed: number;
 }
 
 export interface WalletPerformance {
@@ -32,6 +32,7 @@ export interface WalletPerformance {
     size: number;
     unrealized: number;
     realized: number;
+    fees: number;
 }
 
 export type SentimentResult = {

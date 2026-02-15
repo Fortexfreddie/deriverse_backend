@@ -37,5 +37,5 @@ keys/
 keys/*.json
 
 # Scripts and Doc
-/scripts
+src/scripts/
 /doc

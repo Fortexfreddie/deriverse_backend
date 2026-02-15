@@ -1,39 +1,34 @@
 import { prisma } from '../config/db';
 import { WalletPerformance } from '../types/index';
+import { COINGECKO_ID_MAP } from '../config/constants';
 
-/**
- * PNL SERVICE
- * Calculates performance metrics for open positions using live market data.
- */
 export class PnlService {
     /**
-     * Maps market identifiers to CoinGecko IDs and ensures consistency with Blockchain IDs.
-     * Deriverse IDs: 0 = SOL, 1 = BTC
+     * Fetches live prices using the CoinGecko ID map.
      */
-    private async getMultiplePrices(marketIds: number[]): Promise<Record<number, number>> {
-        // Updated to match your BlockchainService: 0: SOL, 1: BTC
-        const idMap: Record<number, string> = { 0: 'solana', 1: 'bitcoin' };
-        const uniqueIds = [...new Set(marketIds)].map(id => idMap[id]).filter(Boolean);
+    private async getMultiplePrices(marketNames: string[]): Promise<Record<string, number>> {
+        const uniqueNames = [...new Set(marketNames)];
+        const cgIds = uniqueNames.map(name => COINGECKO_ID_MAP[name]).filter(Boolean);
         
-        if (uniqueIds.length === 0) return {};
+        if (cgIds.length === 0) return {};
 
         try {
-            const idsQuery = uniqueIds.join(',');
-            const res = await fetch(
-                `https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd`
-            );
+            const idsQuery = cgIds.join(',');
+            const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd`);
             const json: any = await res.json();
 
-            const prices: Record<number, number> = {};
-            // Reverse map the prices back to our 0 and 1 IDs
-            if (json.solana) prices[0] = Number(json.solana.usd);
-            if (json.bitcoin) prices[1] = Number(json.bitcoin.usd);
-            
+            const prices: Record<string, number> = {};
+            uniqueNames.forEach(name => {
+                const cgId = COINGECKO_ID_MAP[name];
+                if (cgId && json[cgId]) {
+                    prices[name] = Number(json[cgId].usd);
+                }
+            });
             return prices;
         } catch (err) {
             console.error("Price API Error, using fallbacks:", err);
-            // Defensive fallbacks matching the ID logic
-            return { 0: 98.45, 1: 96000.0 };
+            // Fallbacks for main assets
+            return { "SOL-USDC": 102.50, "BTC-USDC": 96000.0, "ETH-USDC": 2700.0 };
         }
     }
 
@@ -47,92 +42,88 @@ export class PnlService {
         if (fills.length === 0) return [];
 
         const groups: Record<string, { fills: any[]; position: any }> = {};
-        const marketIds: number[] = [];
+        const marketNames: string[] = [];
 
-        // 1. Grouping and Initial Market Identification
         for (const f of fills) {
             const pid = f.positionId;
             if (!groups[pid]) {
                 groups[pid] = { fills: [], position: f.position };
-                
-                // Robust identification for batch price fetching
-                const marketStr = (f.position.market || '').toUpperCase();
-                let mId: number;
-                if (marketStr.includes('SOL')) {
-                    mId = 0;
-                } else if (marketStr.includes('BTC')) {
-                    mId = 1;
-                } else {
-                    mId = 0; // Default fallback
-                }
-                marketIds.push(mId);
+                marketNames.push(f.position.market);
             }
             groups[pid].fills.push(f);
         }
 
-        const livePrices = await this.getMultiplePrices(marketIds);
+        const livePrices = await this.getMultiplePrices(marketNames);
         const performance: WalletPerformance[] = [];
 
-        // 2. Metric Calculation Loop
         for (const [pid, data] of Object.entries(groups)) {
-            let netSize = 0;
-            let totalEntryValue = 0;
-            let totalEntrySize = 0;
+            const isSpot = data.fills[0].tradeType === 'SPOT';
+            let currentInventory = 0; 
+            let avgCostBasis = Number(data.fills[0].price);
             let realized = 0;
+            let totalFees = 0;
 
             for (const f of data.fills) {
                 const price = Number(f.price);
                 const size = Number(f.size);
+                totalFees += Number(f.fee || 0);
 
-                if (f.isEntry) {
-                    netSize += size;
-                    totalEntryValue += price * size;
-                    totalEntrySize += size;
+                // --- SEED LOGIC ---
+                // Reset cost basis when inventory is depleted and we see an exit fill
+                // (Fill model has no 'side' field — only 'isEntry' boolean)
+                if (currentInventory === 0 && !f.isEntry) {
+                    avgCostBasis = price;
+                }
+
+                if (isSpot) {
+                    if (f.side === 'BUY') {
+                        const totalCost = (currentInventory * avgCostBasis) + (price * size);
+                        currentInventory += size;
+                        avgCostBasis = totalCost / currentInventory;
+                    } else {
+                        realized += (price - avgCostBasis) * size;
+                        currentInventory -= size;
+                    }
                 } else {
-                    netSize -= size;
-                    const avgEntry = totalEntrySize > 0 ? (totalEntryValue / totalEntrySize) : (data.position.avgEntryPrice || 0);
-                    const pnlFactor = data.position.side === 'LONG' ? 1 : -1;
-                    realized += (price - avgEntry) * size * pnlFactor;
+                    // For Perps, `isEntry` determines if we are adding to position
+                    // Direction of PnL is determined by position side (LONG/SHORT)
+                    const pnlDirection = data.position.side === 'LONG' ? 1 : -1;
+                    
+                    if (f.isEntry) {
+                        // Entry: Add to inventory, update weighted average price
+                        const totalCost = (currentInventory * avgCostBasis) + (price * size);
+                        currentInventory += size;
+                        if (currentInventory > 0) avgCostBasis = totalCost / currentInventory;
+                    } else {
+                        // Exit: Realize PnL based on (Exit Price - Entry Price) * Size * Direction
+                        realized += (price - avgCostBasis) * size * pnlDirection;
+                        currentInventory -= size;
+                    }
                 }
             }
 
-            // Skip closed positions
-            if (Math.abs(netSize) < 1e-9) continue;
+            const marketName = data.position.market;
+            const currentPrice = livePrices[marketName] || 100;
 
-            const avgEntryPrice = totalEntrySize > 0 ? (totalEntryValue / totalEntrySize) : Number(data.position.avgEntryPrice || 0);
-            
-            // 3. SECURE IDENTIFICATION: Prevents SOL using BTC prices
-            const marketName = (data.position.market || '').toUpperCase();
-            let finalMarketId: number;
-            
-            if (marketName.includes('SOL')) {
-                finalMarketId = 0;
-            } else if (marketName.includes('BTC')) {
-                finalMarketId = 1;
-            } else {
-                // Defensive: If we can't identify, skip to avoid huge PnL errors
-                console.warn(`Could not identify market for position ${pid}: ${marketName}`);
-                continue;
+            const pnlFactor = (!isSpot && data.position.side === 'SHORT') ? -1 : 1;
+            // FIX: Use Absolute Inventory to prevent PnL flipping
+            const absInventory = Math.abs(currentInventory);
+            const unrealized = (currentPrice - avgCostBasis) * absInventory * pnlFactor;
+
+            if (absInventory > 1e-9 || Math.abs(realized) > 1e-4) {
+                performance.push({
+                    positionId: pid,
+                    market: marketName,
+                    side: isSpot ? 'LONG' : (data.position.side as any),
+                    entry: Number(avgCostBasis.toFixed(4)),
+                    current: Number(currentPrice.toFixed(4)),
+                    size: Number(absInventory.toFixed(4)),
+                    unrealized: Number(unrealized.toFixed(2)),
+                    realized: Number(realized.toFixed(2)),
+                    fees: Number(totalFees.toFixed(4))
+                });
             }
-
-            // Get live price or use specific fallback based on ID
-            const currentPrice = livePrices[finalMarketId] ?? (finalMarketId === 0 ? 98.45 : 96000.0);
-
-            const pnlFactor = data.position.side === 'LONG' ? 1 : -1;
-            const unrealized = (currentPrice - avgEntryPrice) * netSize * pnlFactor;
-
-            performance.push({
-                positionId: pid,
-                market: data.position.market,
-                side: data.position.side as 'LONG' | 'SHORT',
-                entry: Number(avgEntryPrice.toFixed(4)),
-                current: Number(currentPrice.toFixed(4)),
-                size: Number(netSize.toFixed(4)),
-                unrealized: Number(unrealized.toFixed(2)),
-                realized: Number(realized.toFixed(2))
-            });
         }
-
         return performance;
     }
 }
