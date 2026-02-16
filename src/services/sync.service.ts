@@ -126,7 +126,7 @@ export class SyncService {
                     }
                 }
 
-                const isClosed = Math.abs(netSize) < 1e-9;
+                const isClosed = Math.abs(netSize) < 1e-6;
                 const avgEntryPrice = entrySize > 0 ? entryValue / entrySize : 0;
                 const avgExitPrice = exitSize > 0 ? exitValue / exitSize : null;
                 
@@ -173,11 +173,11 @@ export class SyncService {
     private groupTradesByPosition(trades: TradeEvent[]) {
         const groups = new Map<string, any>();
         for (const trade of trades) {
-            // Use the positionId from the trade event if available to prevent collision
-            // Fallback to daily bucket key to avoid merging trades across weeks
-            const key = trade.marketId 
-                ? `${trade.marketId}-${trade.side}-${Math.floor(trade.timestamp.getTime() / 86400000)}`
-                : `${trade.symbol}-${trade.side}-${Math.floor(trade.timestamp.getTime() / 86400000)}`;
+            const marketKey = trade.marketId !== -1 ? trade.marketId : trade.symbol;
+            
+            // Group by Market + Side + Day
+            const dateBucket = Math.floor(trade.timestamp.getTime() / 86400000);
+            const key = `${marketKey}-${trade.side}-${dateBucket}`;
             
             if (!groups.has(key)) {
                 groups.set(key, { marketId: trade.marketId, side: trade.side, trades: [] });

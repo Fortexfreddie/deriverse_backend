@@ -506,6 +506,113 @@ export class AnalyticsService {
 
         return { daily, hourly };
     }
+    /**
+     * Get equity curve for a wallet
+     */
+    async getEquityCurve(walletAddress: string) {
+        // 1. Fetch closed positions sorted by time
+        const trades = await prisma.position.findMany({
+            where: { walletAddress, status: 'CLOSED' },
+            orderBy: { closedAt: 'asc' },
+            select: {
+                closedAt: true,
+                realizedPnl: true,
+                market: true
+            }
+        });
+
+        let cumulativePnl = 0;
+        const startingBalance = 10000; // Customizable base balance
+
+        // 2. Map into a format ready for a Line Chart
+        return trades.map(trade => {
+            cumulativePnl += Number(trade.realizedPnl);
+            return {
+                timestamp: trade.closedAt,
+                equity: startingBalance + cumulativePnl,
+                change: trade.realizedPnl,
+                market: trade.market
+            };
+        });
+    }
+
+    /**
+     * Get global leaderboard (Top 5 profitable traders)
+     */
+    async getGlobalLeaderboard() {
+        // Group by wallet and sum realized PnL
+        const topTraders = await prisma.position.groupBy({
+            by: ['walletAddress'],
+            _sum: {
+                realizedPnl: true
+            },
+            orderBy: {
+                _sum: {
+                    realizedPnl: 'desc'
+                }
+            },
+            take: 5
+        });
+
+        // Map to anonymous format
+        return topTraders.map(trader => {
+            const wallet = trader.walletAddress;
+            const shortWallet = wallet.length > 8 
+                ? `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}` 
+                : wallet;
+            
+            return {
+                wallet: shortWallet,
+                pnl: Math.round((trader._sum.realizedPnl || 0) * 100) / 100
+            };
+        });
+    }
+
+    /**
+     * Get portfolio composition (Pie Chart Data)
+     */
+    async getPortfolioComposition(walletAddress: string) {
+        const positions = await prisma.position.findMany({
+            where: { 
+                walletAddress,
+                status: 'OPEN' 
+            },
+            select: {
+                market: true,
+                totalSize: true,
+                avgEntryPrice: true
+            }
+        });
+      
+        // 1. Group by Market to avoid duplicate slices in the chart
+        const marketTotals = new Map<string, number>();
+      
+        positions.forEach(pos => {
+            // Clean up the name: if it's "UNKNOWN--1", label it "OTHER"
+            const marketName = pos.market.startsWith('UNKNOWN') ? 'OTHER' : pos.market;
+            
+            const value = Number(pos.totalSize) * Number(pos.avgEntryPrice || 0);
+            
+            const currentTotal = marketTotals.get(marketName) || 0;
+            marketTotals.set(marketName, currentTotal + value);
+        });
+      
+        // 2. Convert Map to Array for Calculation (Calculate total value inside the array)
+        let totalValue = 0;
+        const composition: Array<{ market: string; value: number }> = [];
+
+        marketTotals.forEach((value, market) => {
+            totalValue += value;
+            composition.push({ market, value });
+        });
+      
+        // 3. Return percentages for the frontend pie chart
+        return composition.map(item => ({
+            market: item.market,
+            value: Math.round(item.value * 100) / 100, // Round to 2 decimals
+            percentage: totalValue > 0 ? Number(((item.value / totalValue) * 100).toFixed(2)) : 0
+        })).sort((a, b) => b.value - a.value); // Sort biggest to smallest
+    }
 }
 
 export default new AnalyticsService();

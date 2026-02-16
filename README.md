@@ -179,9 +179,13 @@ Annotate a trade manually or let the system auto-analyze it.
 | **POST** | `/api/sync` | Sync trades from blockchain for a wallet |
 | **GET** | `/api/dashboard/:wallet` | Live PnL for open positions |
 | **GET** | `/api/trades/:wallet` | Paginated trade history with filters |
+| **GET** | `/api/analytics/leaderboard` | Get global leaderboard (Top 5 profitable traders) |
 | **GET** | `/api/analytics/:wallet` | Comprehensive analytics (Win Rate, Fees, etc.) |
 | **GET** | `/api/analytics/:wallet/historical-pnl` | Daily PnL chart data with drawdown |
 | **GET** | `/api/analytics/:wallet/time-analysis` | Hourly/Daily performance breakdown |
+| **GET** | `/api/analytics/:wallet/equity-curve` | Get equity curve data (Time, Equity, Change) |
+| **GET** | `/api/analytics/:wallet/composition` | Get portfolio composition (Market, Value, Percentage) |
+| **GET** | `/api/analytics/:wallet/behavior` | Get behavioral metrics (Revenge trading, streaks) |
 | **PATCH** | `/api/journal/:positionId` | Update journal notes & trigger AI analysis |
 
 ---

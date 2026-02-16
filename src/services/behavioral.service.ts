@@ -6,92 +6,89 @@ import { prisma } from '../config/db';
  * Uses real position PnL data for accurate win/loss metrics.
  */
 export class BehavioralService {
-    async analyzeWallet(walletAddress: string) {
-        const fills = await prisma.fill.findMany({
-            where: { position: { walletAddress } },
-            orderBy: { timestamp: 'asc' },
-            include: { position: true }
-        });
+    async getBehavioralMetrics(walletAddress: string) {
+        // Fetch both in parallel for performance
+        const [trades, fills] = await Promise.all([
+            prisma.position.findMany({
+                where: { walletAddress, status: 'CLOSED' },
+                orderBy: { closedAt: 'asc' },
+                select: { id: true, realizedPnl: true, market: true }
+            }),
+            prisma.fill.findMany({
+                where: { position: { walletAddress } },
+                orderBy: { timestamp: 'asc' },
+                include: { position: true }
+            })
+        ]);
 
-        const insights: string[] = [];
-        let revengeTradeCount = 0;
-        let totalProfit = 0;
-        let totalLoss = 0;
-        let wins = 0;
-        let losses = 0;
-
-        // 1. Guard clause: If no trades, return early
-        if (fills.length < 2) {
-            return {
-                revengeTradeCount: 0,
-                insights: ["Insufficient trade history for behavioral analysis."],
-                tradeCount: fills.length,
-                profitFactor: 0,
-                winRate: 0
+        if (trades.length === 0) {
+            return { 
+                expectancy: 0, 
+                winRate: 0, 
+                profitFactor: 0, 
+                riskRewardRatio: 0, 
+                revengeTradeCount: 0, 
+                streaks: { current: 0, maxWin: 0, maxLoss: 0 }, 
+                insights: ["No trades found."] 
             };
         }
 
-        // 2. Track which positions we've already counted to avoid
-        //    duplicating PnL across multiple fills of the same position
-        const countedPositions = new Set<string>();
+        // --- Quant Logic (Streaks & PnL) ---
+        let currentStreak = 0, maxWinStreak = 0, maxLossStreak = 0;
+        let totalWins = 0, totalLosses = 0, winCount = 0;
 
-        for (let i = 0; i < fills.length; i++) {
-            const current = fills[i];
-            if (!current) continue;
+        trades.forEach((trade) => {
+            const pnl = Number(trade.realizedPnl || 0);
+            if (pnl > 0) {
+                winCount++;
+                totalWins += pnl;
+                currentStreak = currentStreak > 0 ? currentStreak + 1 : 1;
+                maxWinStreak = Math.max(maxWinStreak, currentStreak);
+            } else if (pnl < 0) {
+                totalLosses += Math.abs(pnl);
+                currentStreak = currentStreak < 0 ? currentStreak - 1 : -1;
+                maxLossStreak = Math.max(maxLossStreak, Math.abs(currentStreak));
+            } else {
+                currentStreak = 0;
+            }
+        });
 
-            // --- Profit Factor & Win Rate (per-position, deduplicated) ---
-            // Count each closed position exactly once using its realized PnL
-            if (!current.isEntry && current.position.status === 'CLOSED' && !countedPositions.has(current.positionId)) {
-                countedPositions.add(current.positionId);
-                const pnl = current.position.realizedPnl ?? 0;
+        const lossCount = trades.length - winCount;
+        const winRate = (winCount / trades.length) * 100;
+        const avgWin = winCount > 0 ? totalWins / winCount : 0;
+        const avgLoss = lossCount > 0 ? totalLosses / lossCount : 0;
+        const expectancy = ((winCount / trades.length) * avgWin) - ((lossCount / trades.length) * avgLoss);
+        const profitFactor = totalLosses > 0 ? totalWins / totalLosses : (totalWins > 0 ? 100 : 0);
 
-                if (pnl > 0) {
-                    wins++;
-                    totalProfit += pnl;
-                } else if (pnl < 0) {
-                    losses++;
-                    totalLoss += Math.abs(pnl);
+        // --- Revenge Trade Logic ---
+        let revengeTradeCount = 0;
+        for (let i = 1; i < fills.length; i++) {
+            const prev = fills[i - 1];
+            const curr = fills[i];
+            if (prev && curr && !prev.isEntry && curr.isEntry) { // Fast re-entry after closing
+                const timeDiffMin = (curr.timestamp.getTime() - prev.timestamp.getTime()) / 1000 / 60;
+                if (timeDiffMin < 15 && curr.position.market === prev.position.market) {
+                    revengeTradeCount++;
                 }
             }
-
-            // --- Revenge Trade Detection ---
-            if (i > 0) {
-                const previous = fills[i - 1];
-                if (previous && !previous.isEntry && current.isEntry) {
-                    const timeDiff = (current.timestamp.getTime() - previous.timestamp.getTime()) / 1000 / 60;
-                    // Only count as revenge if same market + fast re-entry
-                    if (timeDiff < 15 && current.position.market === previous.position.market) {
-                        revengeTradeCount++;
-                    }
-                }
-            }
         }
 
-        // 3. Generate behavioral insights
-        if (revengeTradeCount > 1) {
-            insights.push(`Detected ${revengeTradeCount} potential revenge trades. You are over-reacting to market movements.`);
-        }
-
-        const totalClosed = wins + losses;
-        const winRate = totalClosed > 0 ? (wins / totalClosed) * 100 : 0;
-        const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : (totalProfit > 0 ? 100 : 0);
-
-        if (winRate > 60) {
-            insights.push(`Strong win rate of ${winRate.toFixed(1)}%. Maintain execution discipline.`);
-        } else if (winRate < 40 && totalClosed > 3) {
-            insights.push(`Low win rate (${winRate.toFixed(1)}%). Review your entry criteria and risk management.`);
-        }
-
-        if (profitFactor < 1 && totalClosed > 3) {
-            insights.push(`Profit factor below 1 (${profitFactor.toFixed(2)}). Your losses outweigh your gains.`);
-        }
+        // --- Insight Generation ---
+        const insights: string[] = [];
+        if (revengeTradeCount > 0) insights.push(`Stop! You've revenge-traded ${revengeTradeCount} times. Wait 30 mins after a loss.`);
+        if (profitFactor < 1) insights.push("Your losses are currently larger than your wins. Tighten your stop losses.");
+        if (winRate > 60) insights.push("Consistent execution detected. You have a solid win rate.");
 
         return {
+            expectancy: Number(expectancy.toFixed(2)),
+            winRate: Number(winRate.toFixed(1)),
+            profitFactor: Number(profitFactor.toFixed(2)),
+            riskRewardRatio: avgLoss > 0 ? Number((avgWin / avgLoss).toFixed(2)) : 0,
             revengeTradeCount,
-            insights,
-            tradeCount: fills.length,
-            winRate: Number(winRate.toFixed(2)),
-            profitFactor: Number(profitFactor.toFixed(2))
+            streaks: { current: currentStreak, maxWin: maxWinStreak, maxLoss: maxLossStreak },
+            insights
         };
     }
 }
+
+export default new BehavioralService();

@@ -215,6 +215,55 @@
         }
       }
     },
+    "/api/analytics/leaderboard": {
+      "get": {
+        "summary": "Get global leaderboard",
+        "tags": ["Analytics"],
+        "responses": {
+          "200": {
+            "description": "Leaderboard data fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                    "success": true,
+                    "data": [
+                        { "wallet": "FK4u...3wUp", "pnl": 1250.50 }
+                    ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "/api/analytics/{wallet}/equity-curve": {
+      "get": {
+        "summary": "Get equity curve data",
+        "tags": ["Analytics"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Equity curve data fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                    "success": true,
+                    "data": [
+                        { "timestamp": "2026-02-09T16:02:43.000Z", "equity": 10050.25, "change": 50.25, "market": "SOL-PERP" }
+                    ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
     "/api/analytics/{wallet}/time-analysis": {
       "get": {
         "summary": "Get time-based performance metrics",
@@ -240,6 +289,77 @@
                           ]
                       }
                   }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "/api/analytics/{wallet}/composition": {
+      "get": {
+        "summary": "Get portfolio composition",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wallet",
+            "schema": { "type": "string" },
+            "required": true,
+            "description": "Wallet address"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Portfolio composition fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                    "success": true,
+                    "data": [
+                        { "market": "SOL-PERP", "value": 5000, "percentage": 50.0 },
+                        { "market": "BTC-PERP", "value": 5000, "percentage": 50.0 }
+                    ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "/api/analytics/{wallet}/behavior": {
+      "get": {
+        "summary": "Get behavioral metrics",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wallet",
+            "schema": { "type": "string" },
+            "required": true,
+            "description": "Wallet address"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Behavioral metrics fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                    "success": true,
+                    "data": {
+                        "expectancy": 150.5,
+                        "winRate": 65.2,
+                        "profitFactor": 2.1,
+                        "riskRewardRatio": 1.5,
+                        "revengeTradeCount": 2,
+                        "streaks": { "current": 3, "maxWin": 5, "maxLoss": 2 },
+                        "insights": ["Strong win rate of 65.2%."]
+                    }
+                }
               }
             }
           },

@@ -3,6 +3,7 @@ import { SyncService } from '../services/sync.service';
 import { PnlService } from '../services/pnl.service';
 import analyticsService from '../services/analytics.service';
 import journalService from '../services/journal.service';
+import behavioralService from '../services/behavioral.service';
 import { prisma } from '../config/db';
 import { AppError } from '../utils/appError';
 
@@ -261,6 +262,83 @@ export class TradeController {
                 data: result.updated,
                 analysis: result.analysis
             });
+        } catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /api/analytics/:wallet/equity-curve
+     * Get equity curve for a wallet
+     */
+    async getEquityCurve(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const wallet = Array.isArray(req.params.wallet) ? req.params.wallet[0] : req.params.wallet;
+
+            if (!wallet) {
+                throw new AppError('Wallet address is required', 400);
+            }
+
+            const equityCurve = await analyticsService.getEquityCurve(wallet);
+
+            res.status(200).json({
+                success: true,
+                data: equityCurve
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+    /**
+     * GET /api/analytics/leaderboard
+     * Get global leaderboard
+     */
+    async getGlobalLeaderboard(_req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const leaderboard = await analyticsService.getGlobalLeaderboard();
+
+            res.status(200).json({
+                success: true,
+                data: leaderboard
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/analytics/:wallet/composition
+     * Get portfolio composition
+     */
+    async getPortfolioComposition(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const wallet = Array.isArray(req.params.wallet) ? req.params.wallet[0] : req.params.wallet;
+
+            if (!wallet) {
+                throw new AppError('Wallet address is required', 400);
+            }
+
+            const composition = await analyticsService.getPortfolioComposition(wallet);
+
+            res.status(200).json({
+                success: true,
+                data: composition
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/analytics/:wallet/behavior
+     * Get behavioral metrics (Revenge trading, streaks, psychology)
+     */
+    async getBehavioralMetrics(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const wallet = Array.isArray(req.params.wallet) ? req.params.wallet[0] : req.params.wallet;
+            if (!wallet) throw new AppError('Wallet address is required', 400);
+
+            const metrics = await behavioralService.getBehavioralMetrics(wallet);
+            res.json({ success: true, data: metrics });
         } catch (error) {
             next(error);
         }

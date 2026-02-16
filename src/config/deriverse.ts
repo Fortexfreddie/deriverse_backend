@@ -7,7 +7,7 @@ import { Engine } from '@deriverse/kit';
  * exclusively for binary log decoding (logsDecode).
  */
 
-const rpcUrl = process.env.SOLANA_RPC_HTTP || "https://api.devnet.solana.com";
+const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 export const rpc = createSolanaRpc(devnet(rpcUrl));
 
 const programId = (process.env.PROGRAM_ID || "Drvrseg8AQLP8B96DBGmHRjFGviFNYTkHueY9g3k27Gu") as any;

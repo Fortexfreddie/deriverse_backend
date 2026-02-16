@@ -36,6 +36,14 @@ router.get('/trades/:wallet', (req, res, next) =>
 );
 
 /**
+ * GET /api/analytics/leaderboard
+ * Get global leaderboard (Top 5 profitable traders)
+ */
+router.get('/analytics/leaderboard', (req, res, next) =>
+  controller.getGlobalLeaderboard(req, res, next)
+);
+
+/**
  * GET /api/analytics/:wallet
  * Get comprehensive analytics (supports filtering: ?market=&startDate=&endDate=)
  */
@@ -57,6 +65,30 @@ router.get('/analytics/:wallet/historical-pnl', (req, res, next) =>
  */
 router.get('/analytics/:wallet/time-analysis', (req, res, next) =>
   controller.getTimeBasedPerformance(req, res, next)
+);
+
+/**
+ * GET /api/analytics/:wallet/equity-curve
+ * Get equity curve for a wallet
+ */
+router.get('/analytics/:wallet/equity-curve', (req, res, next) =>
+  controller.getEquityCurve(req, res, next)
+);
+
+/**
+ * GET /api/analytics/:wallet/composition
+ * Get portfolio composition
+ */
+router.get('/analytics/:wallet/composition', (req, res, next) =>
+  controller.getPortfolioComposition(req, res, next)
+);
+
+/**
+ * GET /api/analytics/:wallet/behavior
+ * Get behavioral metrics
+ */
+router.get('/analytics/:wallet/behavior', (req, res, next) =>
+  controller.getBehavioralMetrics(req, res, next)
 );
 
 /**

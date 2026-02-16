@@ -1,6 +1,6 @@
 import { rpc, deriverseEngine, programId } from '../config/deriverse';
 import { TradeEvent } from '../types';
-import { getMarketName } from '../config/constants';
+import { getMarketName, DECIMAL_MAP } from '../config/constants';
 
 // const PRICE_DEC = 1e9;
 // const ASSET_DEC = 1e9;
@@ -12,6 +12,28 @@ const QUOTE_DEC = 1e6; // USDC has 6 decimals
  * from transaction logs using the Deriverse Engine IDL.
  */
 export class BlockchainService {
+    // Helper to wait between retries or rate limit events
+    private wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    /**
+     * RETRY WRAPPER
+     * Handles 429 (Too Many Requests) errors by waiting and retrying.
+     * Essential for public RPCs and free-tier providers like Helius.
+     */
+    private async withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
+        try {
+            return await fn();
+        } catch (err: any) {
+            const isRateLimit = err.message?.includes('429') || err.context?.statusCode === 429;
+            if (retries > 0 && isRateLimit) {
+                console.log(`Rate limited. Retrying in ${delay}ms... (${retries} left)`);
+                await this.wait(delay);
+                return this.withRetry(fn, retries - 1, delay * 2);
+            }
+            throw err;
+        }
+    }
+
     /**
      * Fetches and decodes trades for a specific wallet address
      * @param walletAddress - Solana wallet address to fetch trades for
@@ -22,7 +44,12 @@ export class BlockchainService {
         const allTrades: TradeEvent[] = [];
 
         console.log(`Fetching signatures (Limit: ${limit})...`);
-        const sigsResponse: any = await (rpc as any).getSignaturesForAddress(walletAddress as any, { limit }).send();
+        
+        // Wrap signature fetch in retry logic
+        const sigsResponse: any = await this.withRetry(() => 
+            (rpc as any).getSignaturesForAddress(walletAddress as any, { limit }).send()
+        );
+        
         const signatures = Array.isArray(sigsResponse) ? sigsResponse : (sigsResponse?.value || []);
         
         const validSigs = signatures.filter((s: any) => s.err === null)
@@ -35,20 +62,28 @@ export class BlockchainService {
 
         for (const sigInfo of validSigs) {
             try {
-                const tx = await (rpc as any).getTransaction(sigInfo.signature, { 
-                    maxSupportedTransactionVersion: 0 
-                }).send();
+                // Throttle requests slightly to avoid aggressive rate limiting
+                await this.wait(100);
+
+                // Wrap transaction fetch in retry logic
+                const tx = await this.withRetry(() => 
+                    (rpc as any).getTransaction(sigInfo.signature, { 
+                        maxSupportedTransactionVersion: 0 
+                    }).send()
+                );
                 
-                const logs = tx?.value?.meta?.logMessages || tx?.meta?.logMessages || [];
+                // Cast to any to access metadata properties without TS errors
+                const txData = tx as any;
+                const logs = txData?.value?.meta?.logMessages || txData?.meta?.logMessages || [];
 
                 if (logs.some((line: string) => line.startsWith("Program data: "))) {
                     const decoded = await this.decodeBinaryLogs(logs);
                     
                     // Accurate Fees & Timestamp
                     // Explicitly cast to Number before dividing
-                    const rawFee = tx?.value?.meta?.fee || tx?.meta?.fee || 0;
+                    const rawFee = txData?.value?.meta?.fee || txData?.meta?.fee || 0;
                     const networkFee = Number(rawFee) / 1e9; 
-                    const txBlockTime = tx?.blockTime || tx?.value?.blockTime || sigInfo.blockTime;
+                    const txBlockTime = txData?.blockTime || txData?.value?.blockTime || sigInfo.blockTime;
 
                     const parsed = this.mapEventsToTrades(decoded, sigInfo.signature, txBlockTime, networkFee);
                     
@@ -57,8 +92,8 @@ export class BlockchainService {
                         console.log(`Signature: ${sigInfo.signature.substring(0, 8)}... | Parsed ${parsed.length} trade(s)`);
                     }
                 }
-            } catch (err) {
-                console.error(`Error processing signature ${sigInfo.signature.substring(0, 8)}:`, err);
+            } catch (err: any) {
+                console.error(`Error processing signature ${sigInfo.signature.substring(0, 8)}:`, err.message);
             }
         }
         return allTrades;
@@ -106,19 +141,18 @@ export class BlockchainService {
         const trades: TradeEvent[] = [];
         const timestamp = blockTime ? new Date(Number(blockTime) * 1000) : new Date();
         
-        // 1. Pre-process ALL events to link Order IDs and Market IDs (From your older logic)
+        // 1. Link Order IDs to Market IDs from all events in the tx
         const orderIdToInstrId = new Map<number, number>();
         events.forEach(msg => {
-            const possibleId = msg.instrId ?? msg.marketId ?? msg.assetId ?? msg.instrumentIndex;
+            const possibleId = msg.instrId ?? msg.marketId;
             if (msg.orderId != null && possibleId != null) {
                 orderIdToInstrId.set(Number(msg.orderId), Number(possibleId));
             }
         });
 
+        // 2. Aggregate Fees & Funding
         let totalFees = networkFee;
         let fundingValue = 0;
-
-        // 2. Aggregate Fees & Funding (Tag 15/23/24)
         events.forEach((e: any) => {
             if (e.tag === 15 || e.tag === 23 || e.fees !== undefined) {
                 const feeVal = e.fees !== undefined ? e.fees : (e.rebates || 0);
@@ -129,7 +163,7 @@ export class BlockchainService {
             }
         });
 
-        // 3. Filter for Fills (Tag 11 = Spot, Tag 19 = Perp)
+        // 3. Filter for Fills
         const tradeEvents = events.filter((e: any) => 
             e.tag === 11 || e.tag === 19 || (e.price !== undefined && (e.qty || e.perps))
         );
@@ -137,51 +171,51 @@ export class BlockchainService {
         const feePerTrade = tradeEvents.length > 0 ? totalFees / tradeEvents.length : 0;
 
         for (const e of tradeEvents) {
+            // 1. Resolve Instrument ID
+            let instrId = e.instrId ?? e.marketId ?? orderIdToInstrId.get(Number(e.orderId)) ?? -1;
+            
             const rawPrice = Number(e.price);
             const rawQty = Number(e.qty ?? e.perps ?? 0);
 
-            // 4. PRICE-BASED SCALING & ID ASSIGNMENT (Merging your new requirements)
-            let instrId: number;
-            let assetDecimals: number;
-
-            if (rawPrice > 10000) {
-                instrId = 99; // LETTERA
-                assetDecimals = 1e7; 
-            } else if (rawPrice > 10 && rawPrice < 500) {
-                instrId = 0; // SOL
-                assetDecimals = 1e9;
-            } else if (rawPrice > 0.9 && rawPrice < 1.1) {
-                instrId = 100; // VELIT
-                assetDecimals = 1e6;
-            } else {
-                const foundId = e.instrId ?? e.marketId ?? orderIdToInstrId.get(Number(e.orderId));
-                instrId = foundId !== undefined ? Number(foundId) : -1;
-                assetDecimals = 1e9;
+            if (instrId === -1) {
+                if (rawPrice >= 10000) {
+                    instrId = 2; // LETTERA/USDC (~$13.5k)
+                } 
+                else if (rawPrice >= 3000 && rawPrice <= 4000) {
+                    instrId = 6; // SUN/USDC (~$3.2k)
+                }
+                else if (rawPrice >= 900 && rawPrice <= 1100) {
+                    instrId = 14; // trs/USDC (~$1k)
+                }
+                else if (rawPrice >= 70 && rawPrice <= 150) {
+                    instrId = 0; // SOL/USDC (~$85)
+                }
+                else if (rawPrice >= 0.8 && rawPrice <= 1.2) {
+                    instrId = 4; // VELIT/USDC (~$1)
+                }
+                // If it doesn't match any of these, it stays -1 and symbol stays "UNKNOWN"
             }
 
-            const symbol = getMarketName(instrId);
+            // 2. Resolve Decimals from our DECIMAL_MAP
+            const decimals = DECIMAL_MAP[instrId] ?? 9; 
+            const divisor = Math.pow(10, decimals);
 
-            // 5. CONSTRUCT TRADE OBJECT
             const trade: TradeEvent = {
                 signature,
-                side: (e.side === 0 || e.side === 'buy' || e.side === 'bid') ? 'BUY' : 'SELL',
+                side: (e.side === 0 || e.side === 'buy') ? 'BUY' : 'SELL',
                 price: rawPrice,
-                size: rawQty / assetDecimals, 
+                size: rawQty / divisor, // Scaled correctly based on Asset ID
                 marketId: instrId,
-                symbol: symbol,
+                symbol: getMarketName(instrId),
                 timestamp,
                 fee: feePerTrade,
                 tradeType: (e.tag === 19 || e.perps !== undefined) ? 'PERP' : 'SPOT'
             };
 
-            // 6. RESTORED ROBUST ORDER TYPE INFERENCE (From your older code)
+            // 4. Order Type Inference (Keep your robust logic)
             if (e.orderType !== undefined && e.orderType !== null) {
-                trade.orderType = e.orderType === 0 ? 'LIMIT' : e.orderType === 1 ? 'MARKET' : 'IOC';
-            } else if (e.ioc === 1 || e.clientId === 1 || e.clientId === 2 || e.clientId === 923) {
-                // Includes your specific Client IDs found in recent logs
-                trade.orderType = 'MARKET';
-            } else if (e.tag === 11 || e.tag === 19) {
-                // Fills without metadata are almost always from Market orders in the UI
+                trade.orderType = e.orderType === 0 ? 'LIMIT' : 'MARKET';
+            } else if (e.clientId === 1 || e.clientId === 923 || e.tag === 11 || e.tag === 19) {
                 trade.orderType = 'MARKET';
             } else {
                 trade.orderType = 'LIMIT'; 
@@ -189,10 +223,8 @@ export class BlockchainService {
 
             (trade as any).notional = trade.price * trade.size;
             (trade as any).fundingValue = fundingValue;
-
             trades.push(trade);
         }
-
         return trades;
     }
 }
