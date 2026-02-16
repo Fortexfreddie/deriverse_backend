@@ -343,6 +343,33 @@ export class TradeController {
             next(error);
         }
     }
+
+    /**
+     * GET /api/analytics/:wallet/heatmap
+     * Get heatmap data (Daily PnL)
+     */
+    async getHeatmapData(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const wallet = Array.isArray(req.params.wallet) ? req.params.wallet[0] : req.params.wallet;
+            const { year, month } = req.query;
+
+            if (!wallet) throw new AppError('Wallet address is required', 400);
+
+            // Default to current month/year if not provided
+            const current = new Date();
+            const queryYear = year ? parseInt(year as string) : current.getFullYear();
+            const queryMonth = month ? parseInt(month as string) : current.getMonth() + 1;
+
+            const heatmap = await analyticsService.getHeatmapData(wallet, queryYear, queryMonth);
+
+            res.status(200).json({
+                success: true,
+                data: heatmap
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
   export default new TradeController();

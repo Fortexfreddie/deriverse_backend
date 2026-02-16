@@ -94,7 +94,7 @@ cp .env.example .env
 PORT=5000
 NODE_ENV=development
 DATABASE_URL="postgresql://user:password@localhost:5432/deriverse_db?schema=public"
-SOLANA_RPC_URL="https://api.devnet.solana.com"
+SOLANA_RPC_URL="https://api.devnet.solana.com" # Or use Helius (recommended): https://devnet.helius-rpc.com/?api-key=...
 
 # Deriverse Protocol Constants
 PROGRAM_ID=Drvrseg8AQLP8B96DBGmHRjFGviFNYTkHueY9g3k27Gu
@@ -166,7 +166,29 @@ Annotate a trade manually or let the system auto-analyze it.
 
 ---
 
-## Key Features (Institutional-Grade)
+## Institutional-Grade Analytics & Features
+
+### Core Performance
+-   **Total PnL Tracking**: Real-time aggregation of Realized and Unrealized PnL.
+-   **Volume & Fees**: Cumulative trading volume and fee breakdown (Spot vs Perp).
+-   **Win Rate & Ratios**: Analysis of Win Rate, Long/Short Ratio, and Profit Factor.
+
+### Advanced Risk Metrics
+-   **Sharpe & Sortino Ratios**: Risk-adjusted return metrics based on daily PnL volatility.
+-   **Drawdown Analysis**: Tracking of Max Drawdown and Equity Curve peaks.
+-   **Expectancy**: Statistical expectancy per trade based on average win/loss.
+
+### Behavioral & Time Analysis
+-   **Session Breakdown**: PnL performance by Asian, London, and New York sessions.
+-   **Time-of-Day**: Hourly and Daily performance heatmaps to identify peak trading times.
+-   **Psychology Audit**: Detection of Revenge Trading streaks and emotional biases.
+
+### Trade Detail
+-   **Order Type Analysis**: Performance comparison of LIMIT, MARKET, and IOC orders.
+-   **Fee Composition**: Detailed breakdown of fees by trade type.
+-   **Journaling**: Rich annotation capabilities for every trade (Notes, Emotion, Rating).
+
+### Integrity & Context
 -   **Timestamp Integrity**: Decoupled from server time; relies purely on blockchain timestamps to prevent duration distortion.
 -   **High-Fidelity PnL**: Accounts for all fees, funding payments, and partial fills.
 -   **Zero "Dust"**: Floating-point precision handling ensures closed positions are cleanly zeroed out.
@@ -185,6 +207,7 @@ Annotate a trade manually or let the system auto-analyze it.
 | **GET** | `/api/analytics/:wallet/time-analysis` | Hourly/Daily performance breakdown |
 | **GET** | `/api/analytics/:wallet/equity-curve` | Get equity curve data (Time, Equity, Change) |
 | **GET** | `/api/analytics/:wallet/composition` | Get portfolio composition (Market, Value, Percentage) |
+| **GET** | `/api/analytics/:wallet/heatmap` | Get heatmap data (Daily PnL) |
 | **GET** | `/api/analytics/:wallet/behavior` | Get behavioral metrics (Revenge trading, streaks) |
 | **PATCH** | `/api/journal/:positionId` | Update journal notes & trigger AI analysis |
 

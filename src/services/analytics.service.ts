@@ -613,6 +613,35 @@ export class AnalyticsService {
             percentage: totalValue > 0 ? Number(((item.value / totalValue) * 100).toFixed(2)) : 0
         })).sort((a, b) => b.value - a.value); // Sort biggest to smallest
     }
+
+    /**
+     * Get heatmap data (Daily PnL for a month)
+     */
+    async getHeatmapData(walletAddress: string, year: number, month: number) {
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0);
+
+        const closedPositions = await prisma.position.findMany({
+            where: {
+                walletAddress,
+                status: 'CLOSED',
+                closedAt: { gte: startDate, lte: endDate }
+            },
+            select: { closedAt: true, realizedPnl: true }
+        });
+
+        // Grouping logic to sum PnL by date string (YYYY-MM-DD)
+        const heatmap = closedPositions.reduce((acc, pos) => {
+            if (!pos.closedAt) return acc;
+            const dateKey = pos.closedAt.toISOString().split('T')[0];
+            if (dateKey) {
+                acc[dateKey] = (acc[dateKey] || 0) + Number(pos.realizedPnl);
+            }
+            return acc;
+        }, {} as Record<string, number>);
+
+        return heatmap;
+    }
 }
 
 export default new AnalyticsService();

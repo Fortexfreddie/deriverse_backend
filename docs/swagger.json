@@ -297,6 +297,42 @@
         }
       }
     },
+    "/api/analytics/{wallet}/heatmap": {
+      "get": {
+        "summary": "Get heatmap data (Daily PnL)",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wallet",
+            "schema": { "type": "string" },
+            "required": true,
+            "description": "Wallet address"
+          },
+          { "name": "year", "in": "query", "schema": { "type": "integer" }, "required": false },
+          { "name": "month", "in": "query", "schema": { "type": "integer" }, "required": false }
+        ],
+        "responses": {
+          "200": {
+            "description": "Heatmap data fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "2026-02-12": -5.20,
+                    "2026-02-13": 12.45,
+                    "2026-02-16": 9.90
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
     "/api/analytics/{wallet}/composition": {
       "get": {
         "summary": "Get portfolio composition",

@@ -83,6 +83,10 @@ router.get('/analytics/:wallet/composition', (req, res, next) =>
   controller.getPortfolioComposition(req, res, next)
 );
 
+router.get('/analytics/:wallet/heatmap', (req, res, next) =>
+  controller.getHeatmapData(req, res, next)
+);
+
 /**
  * GET /api/analytics/:wallet/behavior
  * Get behavioral metrics
