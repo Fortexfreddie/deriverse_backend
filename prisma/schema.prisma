@@ -26,6 +26,9 @@ model Position {
   totalSize      Float     @default(0)
   totalFees      Float     @default(0)
   realizedPnl    Float?
+
+  // System metadata for PnL breakdown (Funding, SocLoss)
+  metadata        Json?
   
   // Journaling & AI Features
   notes          String?   @db.Text
@@ -79,6 +82,9 @@ model Fill {
   tradeType   String?  // "SPOT", "PERP" - determined from log tag (11=SPOT, 19=PERP)  
   // Per-trade journaling (Important for scaling in/out)
   notes       String?  @db.Text 
+  // NEW: Metadata for per-fill funding/loss and raw event data
+  metadata    Json?    
+  rawData     Json?
   
   timestamp   DateTime @default(now())
   

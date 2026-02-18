@@ -238,7 +238,12 @@
                 "example": {
                     "success": true,
                     "data": [
-                        { "wallet": "FK4u...3wUp", "pnl": 1250.50 }
+                        { 
+                            "wallet": "FK4u...3wUp", 
+                            "pnl": 1250.50,
+                            "winRate": 68.5,
+                            "avatar": "https://api.dicebear.com/7.x/identicon/svg?seed=FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q"
+                        }
                     ]
                 }
               }
@@ -266,6 +271,32 @@
                     "data": [
                         { "timestamp": "2026-02-09T16:02:43.000Z", "equity": 10050.25, "change": 50.25, "market": "SOL-PERP" }
                     ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/schemas/ErrorResponse" },
+          "500": { "$ref": "#/components/schemas/ErrorResponse" }
+        }
+      }
+    },
+    "/api/analytics/drawdown/{wallet}": {
+      "get": {
+        "summary": "Fetch equity curve and drawdown time-series",
+        "tags": ["Analytics"],
+        "parameters": [
+          { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Series fetched successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": [
+                    { "timestamp": "2026-02-18T08:26:47Z", "pnl": 150.5, "drawdown": -20.0, "peak": 170.5 }
+                  ]
                 }
               }
             }

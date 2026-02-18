@@ -327,6 +327,29 @@ export class TradeController {
             next(error);
         }
     }
+
+    /**
+     * GET /api/analytics/drawdown/:wallet
+     * Fetch equity curve and drawdown time-series
+     */
+    async getDrawdown(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const wallet = Array.isArray(req.params.wallet) ? req.params.wallet[0] : req.params.wallet;
+
+            if (!wallet) {
+                throw new AppError('Wallet address is required', 400);
+            }
+
+            const series = await analyticsService.getDrawdownSeries(wallet);
+
+            res.status(200).json({
+                success: true,
+                data: series
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
   export default new TradeController();

@@ -540,32 +540,39 @@ export class AnalyticsService {
      * Get global leaderboard (Top 5 profitable traders)
      */
     async getGlobalLeaderboard() {
-        // Group by wallet and sum realized PnL
+        // 1. Get the heavy hitters by PnL
         const topTraders = await prisma.position.groupBy({
             by: ['walletAddress'],
-            _sum: {
-                realizedPnl: true
-            },
-            orderBy: {
-                _sum: {
-                    realizedPnl: 'desc'
-                }
-            },
-            take: 5
+            _sum: { realizedPnl: true },
+            orderBy: { _sum: { realizedPnl: 'desc' } },
+            take: 10
         });
 
-        // Map to anonymous format
-        return topTraders.map(trader => {
+        // 2. Enrich them with Win Rate and Avatars
+        // We need to use Promise.all to handle async database calls inside the map
+        const leaderboard = await Promise.all(topTraders.map(async (trader) => {
             const wallet = trader.walletAddress;
-            const shortWallet = wallet.length > 8 
-                ? `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}` 
-                : wallet;
             
+            // Count total closed vs winning closed
+            const closedCount = await prisma.position.count({
+                where: { walletAddress: wallet, status: 'CLOSED' }
+            });
+            const winningCount = await prisma.position.count({
+                where: { walletAddress: wallet, status: 'CLOSED', realizedPnl: { gt: 0 } }
+            });
+
+            const winRate = closedCount > 0 ? (winningCount / closedCount) * 100 : 0;
+
             return {
-                wallet: shortWallet,
-                pnl: Math.round((trader._sum.realizedPnl || 0) * 100) / 100
+                wallet: `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}`,
+                pnl: Number(trader._sum.realizedPnl || 0),
+                winRate: Math.round(winRate * 100) / 100,
+                // Pro Tip: Identicons make the UI look 10x better instantly
+                avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${wallet}`
             };
-        });
+        }));
+        
+        return leaderboard.sort((a, b) => b.pnl - a.pnl);
     }
 
     /**
@@ -650,6 +657,59 @@ export class AnalyticsService {
         }, {} as Record<string, { pnl: number, count: number, trades: any[] }>);
 
         return heatmap;
+    }
+
+    /**
+     * Get equity curve and drawdown time-series
+     */
+    async getDrawdownSeries(walletAddress: string) {
+        // 1. Fetch positions with realized PnL (even if OPEN, e.g. partials/funding)
+        const trades = await prisma.position.findMany({
+            where: { 
+                walletAddress, 
+                realizedPnl: { not: null } 
+            },
+            orderBy: { updatedAt: 'asc' }, // Use updatedAt as a general time proxy
+            select: {
+                closedAt: true,
+                updatedAt: true,
+                realizedPnl: true
+            }
+        });
+
+        let cumulativePnl = 0;
+        let peak = 0;
+        const series: Array<{ timestamp: string; pnl: number; drawdown: number; peak: number }> = [];
+
+        // 2. Calculate running PnL, Peak, and Drawdown
+        for (const trade of trades) {
+            // Skip if no PnL (or 0 PnL if we want to reduce noise)
+            const pnl = Number(trade.realizedPnl || 0);
+            if (pnl === 0) continue;
+
+            cumulativePnl += pnl;
+            
+            // Update Peak
+            if (cumulativePnl > peak) {
+                peak = cumulativePnl;
+            }
+
+            // Calculate Drawdown (Absolute from Peak)
+            const drawdown = cumulativePnl - peak;
+            
+            // Determine timestamp: closedAt > updatedAt (usually) > fallback
+            const timestamp = trade.closedAt || trade.updatedAt || new Date();
+
+            series.push({
+                timestamp: timestamp.toISOString(),
+                pnl: Math.round(cumulativePnl * 100) / 100,
+                drawdown: Math.round(drawdown * 100) / 100,
+                peak: Math.round(peak * 100) / 100
+            });
+        }
+        
+        // Sort by timestamp just in case
+        return series.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     }
 }
 

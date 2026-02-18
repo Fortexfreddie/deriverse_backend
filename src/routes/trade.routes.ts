@@ -44,6 +44,14 @@ router.get('/analytics/leaderboard', (req, res, next) =>
 );
 
 /**
+ * GET /api/analytics/drawdown/:wallet
+ * Fetch equity curve and drawdown time-series
+ */
+router.get('/analytics/drawdown/:wallet', (req, res, next) =>
+  controller.getDrawdown(req, res, next)
+);
+
+/**
  * GET /api/analytics/:wallet
  * Get comprehensive analytics (supports filtering: ?market=&startDate=&endDate=)
  */

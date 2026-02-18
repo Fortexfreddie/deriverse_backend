@@ -37,20 +37,16 @@ export class SyncService {
                 const dbPositionId = `${posId}-${walletAddress}`;
 
                 // --- Timestamp Integrity Fix (Part 2) ---
-                // Find the earliest trade in this batch to serve as the TRUE creation time
-                // This prevents "Negative Duration" when syncing historical data
                 const firstTradeTimestamp = data.trades.length > 0
                     ? data.trades.reduce((min: Date, t: TradeEvent) => t.timestamp < min ? t.timestamp : min, data.trades[0].timestamp)
                     : new Date();
 
                 /**
                  * STEP 1: ENSURE PARENT EXISTS
-                 * We upsert the Position first with empty/default metrics.
-                 * This satisfies the Foreign Key constraint for the Fills.
                  */
                 const existingPos = await prisma.position.upsert({
                     where: { id: dbPositionId },
-                    update: {}, // Only create if missing, don't overwrite metrics yet
+                    update: {}, 
                     create: {
                         id: dbPositionId,
                         walletAddress,
@@ -60,20 +56,16 @@ export class SyncService {
                         avgEntryPrice: 0,
                         totalFees: 0,
                         status: 'OPEN',
-                        createdAt: firstTradeTimestamp // Fix: Use earliest trade time, not server time
+                        createdAt: firstTradeTimestamp 
                     }
                 });
 
-                // Check prior status to determine if this is a "New Close" event
                 const wasClosed = existingPos.status === 'CLOSED';
 
                 /**
                  * STEP 2: UPSERT FILLS
-                 * Now that the Position (Parent) is guaranteed to exist, 
-                 * we can safely link the Fills (Children).
                  */
                 for (const trade of data.trades) {
-                    // In a SHORT, the entry is a SELL. In a LONG, the entry is a BUY.
                     const isEntry = (data.side === 'SELL' && trade.side === 'SELL') || 
                                     (data.side === 'BUY' && trade.side === 'BUY');
                     await (prisma.fill.upsert as any)({
@@ -88,7 +80,12 @@ export class SyncService {
                             timestamp: trade.timestamp,
                             isEntry: isEntry,
                             orderType: trade.orderType,
-                            tradeType: trade.tradeType
+                            tradeType: trade.tradeType,
+                            // Store the raw funding/socLoss for this specific fill
+                            rawData: {
+                                funding: (trade as any).funding || 0,
+                                socLoss: (trade as any).socLoss || 0
+                            }
                         }
                     });
                     fillsProcessed++;
@@ -96,15 +93,12 @@ export class SyncService {
 
                 /**
                  * STEP 3: AGGREGATE & SYNC METRICS
-                 * Fetch all fills (new + existing) to recalculate the Position state.
                  */
                 const allFills = await prisma.fill.findMany({
                     where: { positionId: dbPositionId },
                     orderBy: { timestamp: 'asc' }
                 });
 
-                // --- Timestamp Integrity Fix ---
-                // Use the timestamp of the LAST fill in the sequence for closure time
                 const lastFill = allFills[allFills.length - 1];
                 const lastFillTimestamp = lastFill ? lastFill.timestamp : new Date();
 
@@ -112,9 +106,17 @@ export class SyncService {
                 let entryValue = 0, entrySize = 0;
                 let exitValue = 0, exitSize = 0;
                 let totalFees = 0;
+                let totalFunding = 0;
+                let totalSocLoss = 0;
 
                 for (const fill of allFills) {
                     totalFees += (fill.fee ?? 0);
+                    
+                    // Aggregate extra PnL components from fill metadata
+                    const fillMeta = (fill as any).rawData || {};
+                    totalFunding += fillMeta.funding ?? 0;
+                    totalSocLoss += fillMeta.socLoss ?? 0;
+
                     if (fill.isEntry) {
                         netSize += fill.size;
                         entryValue += (fill.price * fill.size);
@@ -131,31 +133,38 @@ export class SyncService {
                 const avgExitPrice = exitSize > 0 ? exitValue / exitSize : null;
                 
                 const pnlMultiplier = data.side === 'BUY' ? 1 : -1;
-                const realizedPnl = exitSize > 0 ? ( (exitValue / exitSize) - avgEntryPrice ) * exitSize * pnlMultiplier : 0;
+                
+                // THE TRUE PNL FORMULA: Price Action + Funding - Socialized Losses
+                const pricePnl = exitSize > 0 ? ((exitValue / exitSize) - avgEntryPrice) * exitSize * pnlMultiplier : 0;
+                const trueRealizedPnl = pricePnl + totalFunding - totalSocLoss;
 
-                // Final Update to the Position with real calculated metrics
+                // Final Update to the Position
                 await prisma.position.update({
                     where: { id: dbPositionId },
                     data: {
                         totalSize: isClosed ? 0 : Math.abs(netSize),
                         avgEntryPrice,
                         totalFees,
-                        updatedAt: lastFillTimestamp, // Consistent with blockchain time
+                        realizedPnl: trueRealizedPnl,
+                        updatedAt: lastFillTimestamp, 
+                        // Store detailed breakdown in JSON to protect user 'notes'
+                        metadata: {
+                            funding: totalFunding,
+                            socLoss: totalSocLoss,
+                            pricePnl: pricePnl,
+                            calculatedAt: new Date().toISOString()
+                        },
                         ...(isClosed ? {
                             status: 'CLOSED',
-                            // Fix: Use blockchain time, not server time
                             closedAt: lastFillTimestamp,
-                            realizedPnl,
                             avgExitPrice
                         } : {
-                            status: 'OPEN',
-                            realizedPnl: realizedPnl
+                            status: 'OPEN'
                         })
                     }
                 });
 
                 // --- Auto-Coach Trigger ---
-                // If position just closed, fire-and-forget AI analysis
                 if (isClosed && !wasClosed) {
                     journalService.analyzeAndJournal(dbPositionId).catch(err => 
                         console.error(`[Auto-Coach] Failed for ${dbPositionId}:`, err)
@@ -174,8 +183,6 @@ export class SyncService {
         const groups = new Map<string, any>();
         for (const trade of trades) {
             const marketKey = trade.marketId !== -1 ? trade.marketId : trade.symbol;
-            
-            // Group by Market + Side + Day
             const dateBucket = Math.floor(trade.timestamp.getTime() / 86400000);
             const key = `${marketKey}-${trade.side}-${dateBucket}`;
             

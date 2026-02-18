@@ -152,14 +152,23 @@ export class BlockchainService {
 
         // 2. Aggregate Fees & Funding
         let totalFees = networkFee;
-        let fundingValue = 0;
+        let fundingTotal = 0;
+        let socLossTotal = 0;
+
         events.forEach((e: any) => {
             if (e.tag === 15 || e.tag === 23 || e.fees !== undefined) {
                 const feeVal = e.fees !== undefined ? e.fees : (e.rebates || 0);
                 totalFees += Math.abs(Number(feeVal)) / QUOTE_DEC;
             }
+            
+            // Perpetual Funding (Tag 24)
             if (e.tag === 24 || e.funding !== undefined) {
-                fundingValue += Number(e.funding || 0) / QUOTE_DEC;
+                fundingTotal += Number(e.funding || 0) / QUOTE_DEC;
+            }
+
+            // Socialized Loss (Tag 27)
+            if (e.tag === 27 || e.socLoss !== undefined) {
+                socLossTotal += Number(e.socLoss || 0) / QUOTE_DEC;
             }
         });
 
@@ -222,7 +231,10 @@ export class BlockchainService {
             }
 
             (trade as any).notional = trade.price * trade.size;
-            (trade as any).fundingValue = fundingValue;
+            (trade as any).funding = fundingTotal;
+            (trade as any).socLoss = socLossTotal;
+            (trade as any).fundingValue = fundingTotal; // Keeping for backward compatibility if needed
+            
             trades.push(trade);
         }
         return trades;
