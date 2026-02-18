@@ -6,6 +6,22 @@
     "description": "Institutional-grade Solana trading analytics and AI-powered journaling."
   },
   "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check endpoint",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "example": { "status": "OK", "timestamp": "2026-02-18T08:26:47.000Z" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sync": {
       "post": {
         "summary": "Sync wallet trades from blockchain",
