@@ -86,46 +86,57 @@
     },
     "/api/trades/{wallet}": {
       "get": {
-        "summary": "Fetch trade history",
+        "summary": "Get wallet trade history with KPIs",
         "tags": ["Trades"],
         "parameters": [
           { "name": "wallet", "in": "path", "required": true, "schema": { "type": "string" } },
           { "name": "market", "in": "query", "schema": { "type": "string" }, "required": false },
-          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
-          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date" }, "required": false },
-          { "name": "limit", "in": "query", "schema": { "type": "integer" }, "required": false },
-          { "name": "offset", "in": "query", "schema": { "type": "integer" }, "required": false }
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date-time" }, "required": false },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date-time" }, "required": false },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 }, "required": false },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 }, "required": false }
         ],
         "responses": {
           "200": {
             "description": "Trade history fetched successfully",
             "content": {
               "application/json": {
-                "example": {
-                   "success": true,
-                   "data": [
-                       {
-                           "id": "59b936dc-b835-4a6a-bc62-950d429d0f38",
-                           "signature": "8wQRPvjLybiYTxDognQ1fHs3WzodVTxkJvyBH1Tg687Ex5ypUb7yd9xAvkA8Ja1mgX3kaPSDbUUYWjbBB1pczEp",
-                           "positionId": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
-                           "price": 85.14,
-                           "size": 1,
-                           "fee": 0.047891,
-                           "isEntry": true,
-                           "orderType": "LIMIT",
-                           "tradeType": "SPOT",
-                           "notes": null,
-                           "timestamp": "2026-02-09T16:02:43.000Z"
-                       }
-                   ],
-                   "count": 4,
-                   "total": 4,
-                   "pagination": {
-                       "limit": null,
-                       "offset": null,
-                       "hasMore": false
-                   }
-               }
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalTrades": { "type": "integer", "example": 18 },
+                        "totalFees": { "type": "number", "example": 0.73 },
+                        "netVolume24h": { "type": "number", "example": 1240502 },
+                        "volumeChange24h": { "type": "number", "example": 12.4 },
+                        "avgTradeSize": { "type": "number", "example": 150.5 },
+                        "distribution": {
+                          "type": "object",
+                          "properties": {
+                            "spot": { "type": "number", "example": 65 },
+                            "perp": { "type": "number", "example": 35 }
+                          }
+                        },
+                        "tradeFrequency": { "type": "number", "example": 2.5 },
+                        "profitFactorHistory": { "type": "number", "example": 1.5 }
+                      }
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Fill" }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "total": { "type": "integer" },
+                        "hasMore": { "type": "boolean" }
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -320,9 +331,24 @@
                 "example": {
                   "success": true,
                   "data": {
-                    "2026-02-12": -5.20,
-                    "2026-02-13": 12.45,
-                    "2026-02-16": 9.90
+                    "2026-02-12": {
+                        "pnl": -5.20,
+                        "count": 1,
+                        "trades": [
+                            {
+                                "id": "...",
+                                "market": "SOL-PERP",
+                                "side": "LONG",
+                                "realizedPnl": -5.20,
+                                "fills": []
+                            }
+                        ]
+                    },
+                    "2026-02-13": {
+                        "pnl": 12.45,
+                        "count": 2,
+                        "trades": []
+                    }
                   }
                 }
               }
@@ -490,6 +516,24 @@
         "properties": {
           "success": { "type": "boolean", "example": false },
           "error": { "type": "string" }
+        }
+      },
+      "Fill": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "signature": { "type": "string" },
+          "positionId": { "type": "string" },
+          "market": { "type": "string" },
+          "side": { "type": "string", "enum": ["LONG", "SHORT"] },
+          "price": { "type": "number" },
+          "size": { "type": "number" },
+          "fee": { "type": "number" },
+          "isEntry": { "type": "boolean" },
+          "orderType": { "type": "string", "enum": ["LIMIT", "MARKET", "STOP_LOSS", "TAKE_PROFIT"] },
+          "tradeType": { "type": "string", "enum": ["SPOT", "PERP"] },
+          "notes": { "type": "string", "nullable": true },
+          "timestamp": { "type": "string", "format": "date-time" }
         }
       }
     }

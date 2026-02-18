@@ -4,7 +4,7 @@ import { PnlService } from '../services/pnl.service';
 import analyticsService from '../services/analytics.service';
 import journalService from '../services/journal.service';
 import behavioralService from '../services/behavioral.service';
-import { prisma } from '../config/db';
+import tradeService from '../services/trade.service';
 import { AppError } from '../utils/appError';
 
 /**
@@ -83,61 +83,18 @@ export class TradeController {
                 throw new AppError('Wallet address is required', 400);
             }
 
-            // Build where clause
-            const whereClause: any = {
-                position: { walletAddress: wallet }
+            const query: any = {
+                limit: limit ? parseInt(limit as string) : undefined,
+                offset: offset ? parseInt(offset as string) : undefined
             };
 
-            if (market) {
-                whereClause.position = {
-                    ...whereClause.position,
-                    market: market as string
-                };
-            }
+            if (market) query.market = market as string;
+            if (startDate) query.startDate = new Date(startDate as string);
+            if (endDate) query.endDate = new Date(endDate as string);
 
-            if (startDate || endDate) {
-                whereClause.timestamp = {};
-                if (startDate) {
-                    whereClause.timestamp.gte = new Date(startDate as string);
-                }
-                if (endDate) {
-                    whereClause.timestamp.lte = new Date(endDate as string);
-                }
-            }
+            const result = await tradeService.getTradeHistory(wallet, query);
 
-            // Get total count for pagination
-            const totalCount = await prisma.fill.count({ where: whereClause });
-
-            // Apply pagination - only include if defined
-            const take = limit ? parseInt(limit as string) : undefined;
-            const skip = offset ? parseInt(offset as string) : undefined;
-
-            const queryOptions: any = {
-                where: whereClause,
-                orderBy: { timestamp: 'desc' },
-                include: { position: true }
-            };
-
-            if (take !== undefined) {
-                queryOptions.take = take;
-            }
-            if (skip !== undefined) {
-                queryOptions.skip = skip;
-            }
-
-            const trades = await prisma.fill.findMany(queryOptions as any);
-
-            res.status(200).json({
-                success: true,
-                data: trades,
-                count: trades.length,
-                total: totalCount,
-                pagination: {
-                    limit: take,
-                    offset: skip,
-                    hasMore: skip !== undefined && take !== undefined ? (skip + take) < totalCount : false
-                }
-            });
+            res.status(200).json(result);
         } catch (error) {
             next(error);
         }

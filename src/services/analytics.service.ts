@@ -621,24 +621,33 @@ export class AnalyticsService {
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0);
 
-        const closedPositions = await prisma.position.findMany({
+        const positions = await prisma.position.findMany({
             where: {
                 walletAddress,
-                status: 'CLOSED',
-                closedAt: { gte: startDate, lte: endDate }
+                updatedAt: { gte: startDate, lte: endDate } 
             },
-            select: { closedAt: true, realizedPnl: true }
+            include: {
+                fills: { orderBy: { timestamp: 'asc' } } 
+            },
+            orderBy: { updatedAt: 'desc' }
         });
 
-        // Grouping logic to sum PnL by date string (YYYY-MM-DD)
-        const heatmap = closedPositions.reduce((acc, pos) => {
-            if (!pos.closedAt) return acc;
-            const dateKey = pos.closedAt.toISOString().split('T')[0];
-            if (dateKey) {
-                acc[dateKey] = (acc[dateKey] || 0) + Number(pos.realizedPnl);
+        const heatmap = positions.reduce((acc, pos) => {
+            if (!pos.updatedAt) return acc;
+            const dateKey = pos.updatedAt.toISOString().split('T')[0];
+            
+            if (!dateKey) return acc;
+
+            if (!acc[dateKey]) {
+                acc[dateKey] = { pnl: 0, count: 0, trades: [] };
             }
+
+            acc[dateKey].trades.push(pos);
+            acc[dateKey].count += 1;
+            acc[dateKey].pnl += Number(pos.realizedPnl || 0);
+
             return acc;
-        }, {} as Record<string, number>);
+        }, {} as Record<string, { pnl: number, count: number, trades: any[] }>);
 
         return heatmap;
     }

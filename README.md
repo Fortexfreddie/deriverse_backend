@@ -207,7 +207,7 @@ Annotate a trade manually or let the system auto-analyze it.
 | **GET** | `/api/analytics/:wallet/time-analysis` | Hourly/Daily performance breakdown |
 | **GET** | `/api/analytics/:wallet/equity-curve` | Get equity curve data (Time, Equity, Change) |
 | **GET** | `/api/analytics/:wallet/composition` | Get portfolio composition (Market, Value, Percentage) |
-| **GET** | `/api/analytics/:wallet/heatmap` | Get heatmap data (Daily PnL) |
+| **GET** | `/api/analytics/:wallet/heatmap` | Get heatmap data (Daily PnL, Activity & Trades) |
 | **GET** | `/api/analytics/:wallet/behavior` | Get behavioral metrics (Revenge trading, streaks) |
 | **PATCH** | `/api/journal/:positionId` | Update journal notes & trigger AI analysis |
 
