@@ -50,32 +50,32 @@
             "content": {
               "application/json": {
                 "example": {
-                   "success": true,
-                   "data": [
-                       {
-                           "positionId": "0-BUY-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
-                           "market": "SOL-PERP",
-                           "side": "LONG",
-                           "entry": 84.5867,
-                           "current": 81.4,
-                           "size": 1.6584,
-                           "unrealized": -5.28,
-                           "realized": 0,
-                           "fees": 0.04
-                       },
-                       {
-                           "positionId": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
-                           "market": "SOL-PERP",
-                           "side": "SHORT",
-                           "entry": 84.87,
-                           "current": 81.4,
-                           "size": 2,
-                           "unrealized": 6.94,
-                           "realized": 0,
-                           "fees": 0.05
-                       }
-                   ]
-               }
+                  "success": true,
+                  "data": [
+                      {
+                          "positionId": "0-BUY-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+                          "market": "SOL-USDC",
+                          "side": "LONG",
+                          "entry": 84.5867,
+                          "current": 81.4,
+                          "size": 1.6584,
+                          "unrealized": -5.28,
+                          "realized": 0,
+                          "fees": 0.04
+                      },
+                      {
+                          "positionId": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+                          "market": "SOL-USDC",
+                          "side": "SHORT",
+                          "entry": 84.87,
+                          "current": 81.4,
+                          "size": 2,
+                          "unrealized": 6.94,
+                          "realized": 0,
+                          "fees": 0.05
+                      }
+                  ]
+              }
               }
             }
           },
@@ -121,7 +121,8 @@
                           }
                         },
                         "tradeFrequency": { "type": "number", "example": 2.5 },
-                        "profitFactorHistory": { "type": "number", "example": 1.5 }
+                        "profitFactorHistory": { "type": "number", "example": 1.5 },
+                        "gasVsProtocolRatio": { "type": "number", "example": 0 }
                       }
                     },
                     "data": {
@@ -179,14 +180,20 @@
                     "marketPerformance": {
                         "SOL-PERP": { "pnl": 1.65, "winRate": 0, "tradeCount": 2, "volume": 310.02 }
                     },
+                    "largestGain": { "amount": 10.5, "positionId": "pos1", "market": "SOL-PERP" },
+                    "largestLoss": { "amount": -5.2, "positionId": "pos2", "market": "SOL-PERP" },
+                    "avgWin": 3.5,
+                    "avgLoss": -2.2,
+                    "orderTypePerformance": {
+                        "LIMIT": { "pnl": 5, "count": 2 },
+                        "MARKET": { "pnl": -1, "count": 1 }
+                    },
                     "riskMetrics": {
                         "sharpeRatio": 1.45,
                         "sortinoRatio": 2.1,
                         "maxDrawdown": 15.4,
                         "profitFactor": 1.8,
-                        "expectancy": 0.35,
-                        "dailyVariance": 0.05,
-                        "annualVolatility": 0.45
+                        "expectancy": 0.35
                     }
                   }
                 }
@@ -215,7 +222,7 @@
                 "example": {
                     "success": true,
                     "data": [
-                        { "date": "2026-02-09", "realizedPnl": 0, "unrealizedPnl": 12.50, "totalPnl": 12.50, "cumulativePnl": 12.50, "drawdown": 0 }
+                        { "date": "2026-02-09", "realizedPnl": 0, "cumulativePnl": 12.50, "drawdown": 0 }
                     ]
                 }
               }
@@ -324,10 +331,10 @@
                       "success": true,
                       "data": {
                           "hourly": [
-                              { "hour": 0, "pnl": 1.5, "trades": 2, "winRate": 50, "volume": 100 }
+                              { "hour": 0, "pnl": 1.5, "trades": 2 }
                           ],
                           "daily": [
-                              { "date": "2026-02-09", "day": "Monday", "pnl": 12.5, "trades": 5, "winRate": 60, "volume": 500 }
+                              { "date": "2026-02-09", "pnl": 12.5, "trades": 5 }
                           ]
                       }
                   }
@@ -496,41 +503,74 @@
             "content": {
               "application/json": {
                 "example": {
-                   "success": true,
-                   "data": {
-                       "id": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
-                       "notes": "I entered this SOL trade because I saw a 15m breakout...",
-                       "rating": 2,
-                       "emotion": "Anxious",
-                       "aiReview": "Your journal entry describes actions (panic selling) that did not occur...",
-                       "aiBias": "Denial",
-                       "aiScore": 2,
-                       "hypotheticalExitPrice": 125.5
-                   },
-                    "analysis": {
-                        "aiAnalysis": {
-                            "bias": "Denial",
-                            "insight": "Your journal entry describes actions (panic selling) that did not occur based on execution data.",
-                            "score": 2,
-                            "advice": "Stick to your plan.",
-                            "next_action": "Walk away for 5 mins."
-                        },
-                        "traderProfile": {
-                            "profile": "The Dip Chaser",
-                            "strength": "High Energy",
-                            "weakness": "Impatience",
-                            "nudge": "Wait for confirmation before entry."
-                        },
-                        "macroContext": {
-                            "sentiment": "Neutral",
-                            "macroContext": "Market is choppy. Avoid leverage."
-                        },
-                        "whatIfAnalysis": {
-                            "opportunityCost": 45.20,
-                            "opportunityCostNote": "You left money on the table."
-                        }
-                    }
-                }
+  "success": true,
+  "data": {
+      "id": "0-SELL-FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+      "walletAddress": "FK4ugTURYRR2hbSDZr1Q1kqU4xX4UQP7o28cr3wUpG2q",
+      "market": "SOL-USDC",
+      "side": "SHORT",
+      "status": "OPEN",
+      "avgEntryPrice": 84.87,
+      "avgExitPrice": null,
+      "totalSize": 2,
+      "totalFees": 0.05,
+      "realizedPnl": 0,
+      "metadata": {
+          "funding": 0.01,
+          "socLoss": 0,
+          "pricePnl": 6.94,
+          "calculatedAt": "2026-02-18T08:26:47Z"
+      },
+      "aiInsight": "Market momentum looks bearish.",
+      "aiAdvice": "Consider scaling out if price holds.",
+      "aiNextAction": "Monitor order book.",
+      "actualExitPrice": null,
+      "opportunityCost": null,
+      "opportunityCostNote": null,
+      "newsHeadlines": ["Solana memecoin surge","Macro risk sells off"],
+      "marketSentiment": "Bearish",
+      "macroContext": "Volatile after CPI release.",
+      "traderProfile": "The Dip Chaser",
+      "tradeFrequency": 2.5,
+      "lastNudge": "Wait for confirmation before entry.",
+      "createdAt": "2026-02-09T16:02:43.000Z",
+      "updatedAt": "2026-02-18T08:26:47Z",
+      "closedAt": null,
+      "notes": "I entered this SOL trade because I saw a 15m breakout...",
+      "rating": 2,
+      "emotion": "Anxious",
+      "aiReview": "Your journal entry describes actions (panic selling) that did not occur based on execution data.",
+      "aiBias": "Denial",
+      "aiScore": 2,
+      "hypotheticalExitPrice": 125.5
+  },
+  "analysis": {
+      "aiAnalysis": {
+          "bias": "Denial",
+          "insight": "Your journal entry describes actions (panic selling) that did not occur based on execution data.",
+          "score": 2,
+          "advice": "Stick to your plan.",
+          "next_action": "Walk away for 5 mins."
+      },
+      "traderProfile": {
+          "profile": "The Dip Chaser",
+          "strength": "High Energy",
+          "weakness": "Impatience",
+          "nudge": "Wait for confirmation before entry.",
+          "winRate": 0.42,
+          "avgHoldTime": 3600000
+      },
+      "macroContext": {
+          "sentiment": "Neutral",
+          "macroContext": "Market is choppy. Avoid leverage.",
+          "headlines": ["Fed meeting tomorrow","SOL Local high"]
+      },
+      "whatIfAnalysis": {
+          "opportunityCost": null,
+          "opportunityCostNote": null
+      }
+  }
+}
               }
             }
           },
@@ -555,6 +595,7 @@
           "id": { "type": "string" },
           "signature": { "type": "string" },
           "positionId": { "type": "string" },
+          "position": { "type": "object" },
           "market": { "type": "string" },
           "side": { "type": "string", "enum": ["LONG", "SHORT"] },
           "price": { "type": "number" },

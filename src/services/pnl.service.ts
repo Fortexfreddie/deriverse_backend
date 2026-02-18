@@ -26,9 +26,8 @@ export class PnlService {
             });
             return prices;
         } catch (err) {
-            console.error("Price API Error, using fallbacks:", err);
-            // Fallbacks for main assets
-            return { "SOL-USDC": 102.50, "BTC-USDC": 96000.0, "ETH-USDC": 2700.0 };
+            console.error("Price API Error, using dynamic fallbacks instead of static 100:", err);
+            return {};
         }
     }
 
@@ -70,7 +69,6 @@ export class PnlService {
 
                 // --- SEED LOGIC ---
                 // Reset cost basis when inventory is depleted and we see an exit fill
-                // (Fill model has no 'side' field — only 'isEntry' boolean)
                 if (currentInventory === 0 && !f.isEntry) {
                     avgCostBasis = price;
                 }
@@ -86,7 +84,6 @@ export class PnlService {
                     }
                 } else {
                     // For Perps, `isEntry` determines if we are adding to position
-                    // Direction of PnL is determined by position side (LONG/SHORT)
                     const pnlDirection = data.position.side === 'LONG' ? 1 : -1;
                     
                     if (f.isEntry) {
@@ -103,7 +100,11 @@ export class PnlService {
             }
 
             const marketName = data.position.market;
-            const currentPrice = livePrices[marketName] || 100;
+            
+            // --- DYNAMIC FALLBACK FIX ---
+            // If livePrices is missing, use avgCostBasis as the current price.
+            // This ensures Unrealized PnL is 0 instead of showing a fake "100.00" profit.
+            const currentPrice = livePrices[marketName] || avgCostBasis;
 
             const pnlFactor = (!isSpot && data.position.side === 'SHORT') ? -1 : 1;
             // FIX: Use Absolute Inventory to prevent PnL flipping

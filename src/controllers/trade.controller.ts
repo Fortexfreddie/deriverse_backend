@@ -352,4 +352,4 @@ export class TradeController {
     }
 }
 
-  export default new TradeController();
+export default new TradeController();
