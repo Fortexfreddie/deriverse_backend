@@ -155,7 +155,9 @@ To populate the database, you must sync a wallet's history.
 Get a comprehensive dashboard of trading performance.
 
 -   **Endpoint**: `GET /api/analytics/:wallet`
--   **Features**: Total PnL, Win Rate, Fees, Volume, Best/Worst Trades.
+-   **Features**: Total PnL, Win Rate, Fees, Volume, Best/Worst Trades, plus multiple time‑series endpoints for deeper inspection.
+    - Historical PnL & drawdown: `GET /api/analytics/:wallet/historical-pnl`
+    - Raw equity + drawdown series: `GET /api/analytics/drawdown/:wallet`
 
 ### 3. Journaling & Auto-Coaching
 Annotate a trade manually or let the system auto-analyze it.
@@ -172,21 +174,24 @@ Annotate a trade manually or let the system auto-analyze it.
 -   **Total PnL Tracking**: Real-time aggregation of Realized and Unrealized PnL.
 -   **Volume & Fees**: Cumulative trading volume and fee breakdown (Spot vs Perp).
 -   **Win Rate & Ratios**: Analysis of Win Rate, Long/Short Ratio, and Profit Factor.
+-   **Global Leaderboard**: See where your wallet ranks among top traders.
 
 ### Advanced Risk Metrics
 -   **Sharpe & Sortino Ratios**: Risk-adjusted return metrics based on daily PnL volatility.
--   **Drawdown Analysis**: Tracking of Max Drawdown and Equity Curve peaks.
+-   **Drawdown Analysis**: Tracking of Max Drawdown and Equity Curve peaks; raw time‑series export available for custom charts.
 -   **Expectancy**: Statistical expectancy per trade based on average win/loss.
 
 ### Behavioral & Time Analysis
 -   **Session Breakdown**: PnL performance by Asian, London, and New York sessions.
 -   **Time-of-Day**: Hourly and Daily performance heatmaps to identify peak trading times.
+-   **Monthly Heatmap**: Daily PnL heatmap by month/year, with drill‑down to individual trades.
+-   **Portfolio Composition**: Snapshot of asset exposure (perp vs spot, market weights).
 -   **Psychology Audit**: Detection of Revenge Trading streaks and emotional biases.
 
 ### Trade Detail
 -   **Order Type Analysis**: Performance comparison of LIMIT, MARKET, and IOC orders.
 -   **Fee Composition**: Detailed breakdown of fees by trade type.
--   **Journaling**: Rich annotation capabilities for every trade (Notes, Emotion, Rating).
+-   **Journaling**: Rich annotation capabilities for every trade (Notes, Emotion, Rating) plus automatic AI-powered "auto-coach" analysis, what‑if exit cost and sentiment context.
 
 ### Integrity & Context
 -   **Timestamp Integrity**: Decoupled from server time; relies purely on blockchain timestamps to prevent duration distortion.
@@ -206,6 +211,7 @@ Annotate a trade manually or let the system auto-analyze it.
 | **GET** | `/api/analytics/:wallet/historical-pnl` | Daily PnL chart data with drawdown |
 | **GET** | `/api/analytics/:wallet/time-analysis` | Hourly/Daily performance breakdown |
 | **GET** | `/api/analytics/:wallet/equity-curve` | Get equity curve data (Time, Equity, Change) |
+| **GET** | `/api/analytics/drawdown/:wallet` | Fetch equity curve and drawdown time‑series |
 | **GET** | `/api/analytics/:wallet/composition` | Get portfolio composition (Market, Value, Percentage) |
 | **GET** | `/api/analytics/:wallet/heatmap` | Get heatmap data (Daily PnL, Activity & Trades) |
 | **GET** | `/api/analytics/:wallet/behavior` | Get behavioral metrics (Revenge trading, streaks) |
