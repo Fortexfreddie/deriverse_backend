@@ -8,11 +8,11 @@ import { Engine } from '@deriverse/kit';
  */
 
 const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
-export const rpc = createSolanaRpc(devnet(rpcUrl));
+export const rpc = createSolanaRpc(devnet(rpcUrl) as any);
 
 const programId = (process.env.PROGRAM_ID || "Drvrseg8AQLP8B96DBGmHRjFGviFNYTkHueY9g3k27Gu") as any;
 const version = 14; 
 
 // The engine is kept for its IDL-based decoding capabilities
-export const deriverseEngine = new Engine(rpc, { programId, version });
+export const deriverseEngine = new Engine(rpc as any, { programId, version });
 export { programId };
