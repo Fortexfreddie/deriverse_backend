@@ -75,7 +75,7 @@ graph TD
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/Fortexfreddie/deriverse_backend>
+git clone https://github.com/Fortexfreddie/deriverse_backend
 cd deriverse-backend
 pnpm install
 ```
@@ -108,6 +108,7 @@ AI_PROVIDER=gemini # or 'deepseek', 'openai'
 GEMINI_API_KEY=your_key_here
 DEEPSEEK_API_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
+CRYPTOPANIC_API_KEY=your_key_here # For market sentiment headlines
 ```
 
 ### 3. Database Setup
@@ -219,18 +220,9 @@ Annotate a trade manually or let the system auto-analyze it.
 
 ---
 
-## Utility Scripts
+## Dev Scripts
 
-We provide several helper scripts in `src/scripts/` for testing and maintenance. Run them using `npx ts-node`:
-
--   `src/scripts/init-account.ts`: Initialize a new Deriverse trading account.
--   `src/scripts/run-sync.ts`: Manually run a sync for a hardcoded wallet.
--   `src/scripts/test-analytics.ts`: Verify analytics calculations against live data.
--   `src/scripts/test-behavior.ts`: Analyze behavioral patterns/audit.
--   `src/scripts/test-pnl.ts`: Calculate and display PnL table.
--   `src/scripts/test-sync-v2.ts`: Test incremental sync logic.
--   `src/scripts/fetch-my-trades.ts`: Debugging tool to print raw trade logs.
--   `src/scripts/run-journal-audit.ts`: Run a behavioral audit (uses BehavioralService).
+Helper scripts in `src/scripts/` are **development-only** utilities for testing and debugging. They are not part of the production server and can be safely ignored.
 
 ---
 

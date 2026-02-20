@@ -11,13 +11,13 @@ import traderProfileService from './trader-profile.service';
  * 2. SyncService (Automatic "End of Trade" analysis)
  */
 export class JournalService {
-    async analyzeAndJournal(positionId: string, updates: { 
-        notes?: string; 
-        emotion?: string; 
-        rating?: number; 
-        hypotheticalExitPrice?: number 
+    async analyzeAndJournal(positionId: string, updates: {
+        notes?: string;
+        emotion?: string;
+        rating?: number;
+        hypotheticalExitPrice?: number
     } = {}) {
-        
+
         // 1. Fetch current position data to give AI the "Context"
         const position = await prisma.position.findUnique({
             where: { id: positionId },
@@ -29,9 +29,10 @@ export class JournalService {
         // 2. Calculate What-If Alternate Reality (Hindsight Analysis)
         let opportunityCost: number | undefined = undefined;
         let opportunityCostNote: string | undefined = undefined;
-        
+
         if (updates.hypotheticalExitPrice && position.avgExitPrice) {
-            opportunityCost = (updates.hypotheticalExitPrice - position.avgExitPrice) * position.totalSize;
+            const direction = position.side === 'LONG' ? 1 : -1;
+            opportunityCost = (updates.hypotheticalExitPrice - position.avgExitPrice) * position.totalSize * direction;
             if (opportunityCost > 0) {
                 opportunityCostNote = `You left $${opportunityCost.toFixed(2)} on the table because you were scared. Your exit strategy is leakier than a basket.`;
             }
@@ -80,14 +81,14 @@ export class JournalService {
         if (updates.notes !== undefined) updateData.notes = updates.notes;
         if (updates.emotion !== undefined) updateData.emotion = updates.emotion;
         if (updates.rating !== undefined) updateData.rating = updates.rating;
-        
+
         if (aiResult?.bias) updateData.aiBias = aiResult.bias;
         if (aiResult?.insight) updateData.aiInsight = aiResult.insight;
         if (aiResult?.advice) updateData.aiAdvice = aiResult.advice;
         if (aiResult?.score) updateData.aiScore = parseInt(String(aiResult.score));
         if (aiResult?.next_action) updateData.aiNextAction = aiResult.next_action;
         if (aiResult) updateData.aiReview = `${aiResult.insight}\n\nTip: ${aiResult.next_action || aiResult.advice}`;
-        
+
         if (updates.hypotheticalExitPrice) updateData.hypotheticalExitPrice = updates.hypotheticalExitPrice;
         if (opportunityCost) updateData.opportunityCost = opportunityCost;
         if (opportunityCostNote) updateData.opportunityCostNote = opportunityCostNote;

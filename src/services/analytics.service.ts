@@ -303,10 +303,9 @@ export class AnalyticsService {
             const variance = dailyPnls.reduce((sum, v) => sum + Math.pow(v - avgDailyPnl, 2), 0) / (dailyPnls.length - 1);
             const stdDev = Math.sqrt(variance);
             
-            // Downside Deviation (Sortino)
+            // Downside Deviation (Sortino) — standard formula: sum of min(r,0)^2 over ALL days
             const downsideVariance = dailyPnls
-                .filter(v => v < 0)
-                .reduce((sum, v) => sum + Math.pow(v, 2), 0) / (dailyPnls.length - 1);
+                .reduce((sum, v) => sum + Math.pow(Math.min(v, 0), 2), 0) / dailyPnls.length;
             const downsideDev = Math.sqrt(downsideVariance);
 
             // Annualize (assume 365 trading days for crypto)
@@ -465,7 +464,7 @@ export class AnalyticsService {
 
         for (const fill of fills) {
             const dateStr = fill.timestamp.toISOString().split('T')[0] ?? "";
-            const hour = fill.timestamp.getHours();
+            const hour = fill.timestamp.getUTCHours();
 
             // Daily Init
             if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, { pnl: 0, trades: 0, volume: 0 });

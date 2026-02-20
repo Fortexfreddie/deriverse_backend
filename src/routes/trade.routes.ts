@@ -1,7 +1,7 @@
 import { Router, type Router as ExpressRouter } from 'express';
 import TradeController from '../controllers/trade.controller';
 import { validate } from '../middleware/validate';
-import { syncSchema, journalSchema } from '../validations/trade.schema';
+import { syncSchema, journalSchema, dashboardSchema, tradesSchema } from '../validations/trade.schema';
 
 /**
  * TRADE ROUTES
@@ -23,7 +23,7 @@ router.post('/sync', validate(syncSchema), (req, res, next) =>
  * GET /api/dashboard/:wallet
  * Fetch live PnL dashboard
  */
-router.get('/dashboard/:wallet', (req, res, next) =>
+router.get('/dashboard/:wallet', validate(dashboardSchema), (req, res, next) =>
   controller.getDashboard(req, res, next)
 );
 
@@ -31,7 +31,7 @@ router.get('/dashboard/:wallet', (req, res, next) =>
  * GET /api/trades/:wallet
  * Fetch trade history (supports filtering: ?market=&startDate=&endDate=&limit=&offset=)
  */
-router.get('/trades/:wallet', (req, res, next) =>
+router.get('/trades/:wallet', validate(tradesSchema), (req, res, next) =>
   controller.getTradeHistory(req, res, next)
 );
 
