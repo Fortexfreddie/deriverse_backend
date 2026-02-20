@@ -9,12 +9,35 @@ export class PnlService {
     private async getMultiplePrices(marketNames: string[]): Promise<Record<string, number>> {
         const uniqueNames = [...new Set(marketNames)];
         const cgIds = uniqueNames.map(name => COINGECKO_ID_MAP[name]).filter(Boolean);
-        
+
         if (cgIds.length === 0) return {};
 
         try {
             const idsQuery = cgIds.join(',');
-            const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd`);
+
+            // simple retry in case Render/hosted env gets throttled
+            let res: Response;
+            let attempt = 0;
+            const maxAttempts = 3;
+            while (true) {
+                attempt++;
+                res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd`);
+                if (res.ok || attempt >= maxAttempts) break;
+
+                const text = await res.text();
+                console.warn(`Coingecko request failed (status=${res.status}); retrying attempt ${attempt}/${maxAttempts}. body=${text}`);
+                // back off a bit before retrying
+                await new Promise(r => setTimeout(r, 500 * attempt));
+            }
+
+            if (!res.ok) {
+                const body = await res.text().catch(() => '<unreadable>');
+                console.error(
+                    `Price API returned non-ok status ${res.status}, body=${body} -- falling back to cost basis`
+                );
+                return {};
+            }
+
             const json: any = await res.json();
 
             const prices: Record<string, number> = {};
@@ -57,7 +80,7 @@ export class PnlService {
 
         for (const [pid, data] of Object.entries(groups)) {
             const isSpot = data.fills[0].tradeType === 'SPOT';
-            let currentInventory = 0; 
+            let currentInventory = 0;
             let avgCostBasis = Number(data.fills[0].price);
             let realized = 0;
             let totalFees = 0;
@@ -85,7 +108,7 @@ export class PnlService {
                 } else {
                     // For Perps, `isEntry` determines if we are adding to position
                     const pnlDirection = data.position.side === 'LONG' ? 1 : -1;
-                    
+
                     if (f.isEntry) {
                         // Entry: Add to inventory, update weighted average price
                         const totalCost = (currentInventory * avgCostBasis) + (price * size);
@@ -100,7 +123,7 @@ export class PnlService {
             }
 
             const marketName = data.position.market;
-            
+
             // --- DYNAMIC FALLBACK FIX ---
             // If livePrices is missing, use avgCostBasis as the current price.
             // This ensures Unrealized PnL is 0 instead of showing a fake "100.00" profit.
