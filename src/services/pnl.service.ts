@@ -27,6 +27,7 @@ export class PnlService {
 
         try {
             const idsQuery = cgIds.join(',');
+            const apiKey = process.env.COINGECKO_API_KEY;
 
             // simple retry in case Render/hosted env gets throttled
             let res: Response;
@@ -34,7 +35,10 @@ export class PnlService {
             const maxAttempts = 3;
             while (true) {
                 attempt++;
-                res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd`);
+                const url = apiKey
+                    ? `https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd&x_cg_demo_api_key=${apiKey}`
+                    : `https://api.coingecko.com/api/v3/simple/price?ids=${idsQuery}&vs_currencies=usd`;
+                res = await fetch(url);
                 if (res.ok || attempt >= maxAttempts) break;
 
                 const text = await res.text();
