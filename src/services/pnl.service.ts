@@ -3,10 +3,23 @@ import { WalletPerformance } from '../types/index';
 import { COINGECKO_ID_MAP } from '../config/constants';
 
 export class PnlService {
+    // simple in‑memory cache for price lookups, keyed by market name
+    // expires after CACHE_TTL_MS milliseconds
+    private priceCache: { timestamp: number; prices: Record<string, number> } | null = null;
+    private readonly CACHE_TTL_MS = 60_000; // 1 minute
+
     /**
-     * Fetches live prices using the CoinGecko ID map.
+     * Fetches live prices using the CoinGecko ID map.  Uses a short-lived cache
+     * so that repeated calls during a short interval don't hammer the external
+     * API (avoids Render/Coingecko rate limits).
      */
     private async getMultiplePrices(marketNames: string[]): Promise<Record<string, number>> {
+        const now = Date.now();
+        if (this.priceCache && now - this.priceCache.timestamp < this.CACHE_TTL_MS) {
+            console.log('Using cached price map');
+            return this.priceCache.prices;
+        }
+
         const uniqueNames = [...new Set(marketNames)];
         const cgIds = uniqueNames.map(name => COINGECKO_ID_MAP[name]).filter(Boolean);
 
@@ -47,9 +60,21 @@ export class PnlService {
                     prices[name] = Number(json[cgId].usd);
                 }
             });
+
+            // update cache
+            this.priceCache = {
+                timestamp: Date.now(),
+                prices: { ...prices }
+            };
+
             return prices;
         } catch (err) {
             console.error("Price API Error, using dynamic fallbacks instead of static 100:", err);
+            // if we have stale cache, return it instead of an empty object
+            if (this.priceCache) {
+                console.warn('Returning stale cached prices due to fetch error');
+                return this.priceCache.prices;
+            }
             return {};
         }
     }
